@@ -4,7 +4,6 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { getRawConfig } from './kv';
 import { getSessionFromRequest } from './auth';
@@ -20,16 +19,50 @@ import manualRoutes from './routes/manual';
 import testRoutes from './routes/tests';
 import pipelineRoutes from './routes/pipeline';
 
-const app = new Hono<{ Bindings: Env }>();
+type AppVars = {
+  requestId: string;
+  requestStart: number;
+};
+const app = new Hono<{ Bindings: Env; Variables: AppVars }>();
+
+// 结构化日志辅助
+function logEvent(event: string, status: string, extra: Record<string, any> = {}) {
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event,
+    status,
+    ...extra,
+  }));
+}
+
+// 暴露给路由模块使用
+app.use('*', async (c, next) => {
+  // 生成 requestId 注入到 c.var,便于路由内取用
+  const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  const start = Date.now();
+  c.set('requestId', requestId);
+  c.set('requestStart', start);
+  await next();
+  // 请求结束输出访问日志(只对 /api/ 路径)
+  const url = new URL(c.req.url);
+  if (url.pathname.startsWith('/api/')) {
+    logEvent('request', c.res.status < 400 ? 'ok' : 'error', {
+      requestId,
+      method: c.req.method,
+      path: url.pathname,
+      status: c.res.status,
+      duration: Date.now() - start,
+    });
+  }
+});
 
 // 全局中间件
-app.use('*', logger());
 app.use('*', secureHeaders());
 app.use('*', cors({
   origin: (origin) => origin || '*',  // 同源
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
 }));
 
 // 健康检查
@@ -112,9 +145,20 @@ app.notFound((c) => {
 
 // 全局错误处理
 app.onError((err, c) => {
-  console.error('[error]', err);
+  const requestId = c.get('requestId') || crypto.randomUUID();
+  const start = c.get('requestStart') || Date.now();
+  const url = new URL(c.req.url);
+  logEvent('error', 'exception', {
+    requestId,
+    method: c.req.method,
+    path: url.pathname,
+    duration: Date.now() - start,
+    error: err.message,
+    stack: err.stack,
+  });
   return c.json({
     error: err.message || 'Internal Server Error',
+    requestId,
   }, 500);
 });
 

@@ -103,12 +103,26 @@ npx wrangler secret put ENCRYPTION_KEY
 
 ### 步骤 4：部署
 
+**方式 A:wrangler 命令行(首次部署)**
+
 ```bash
 npm run deploy
 # 部署完成后获得 Worker 域名，如 https://yt2bili.<你的子域>.workers.dev
 ```
 
-或连接 GitHub 仓库自动部署：Dashboard → Workers → 连接 GitHub 仓库 → 主分支推送后自动部署。
+**方式 B:全自动部署(推荐,关联 GitHub 仓库)**
+
+1. Cloudflare Dashboard → Workers & Pages → Create application → Create Worker
+2. 填写 Worker 名称(如 `yt2bili`)→ Deploy
+3. 创建后进入 Worker 详情页 → Settings → Builds → Connect Git
+4. 授权并选择 GitHub 仓库 `Sweizh/y2b`
+5. 配置:
+   - Production branch: `main`
+   - Build command: `npm install`
+   - Deploy command: `npx wrangler deploy`
+6. 保存后,每次 push 到 `main` 分支自动部署
+7. 在 Worker → Settings → Variables 中配置 `ENCRYPTION_KEY`(加密密钥)
+8. 在 Worker → Settings → KV Namespace Bindings 中绑定 `YT2BILI_KV`
 
 ### 步骤 5：初始化后台
 
@@ -118,10 +132,14 @@ npm run deploy
 
 ### 步骤 6：回填 GitHub Secrets
 
-```
-WORKER_URL    = https://yt2bili.xxx.workers.dev
-PIPELINE_TOKEN = 步骤 5 中复制的 pipeline_token
-```
+GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret:
+
+| Secret 名称 | 值 |
+|---|---|
+| `WORKER_URL` | `https://yt2bili.xxx.workers.dev`(你的 Worker 域名,无尾斜杠) |
+| `PIPELINE_TOKEN` | 步骤 5 中复制的 pipeline_token |
+
+这两个 Secret 被 `.github/workflows/process.yml` 用于让 Python Runner 调用 Worker API。
 
 ### 步骤 7：填写配置
 
@@ -130,6 +148,100 @@ PIPELINE_TOKEN = 步骤 5 中复制的 pipeline_token
 3. 填写 ASR API + 翻译 API
 4. 填写 GitHub Token + 仓库
 5. 每项填完点「测试」按钮验证连通性
+6. (可选)在运行状态区块底部配置「失败通知」Webhook URL,启用后连续失败 ≥ 3 次会发送告警
+
+## 全自动部署(关联 GitHub)
+
+完成上述步骤 4 方式 B 后,系统进入全自动闭环:
+
+```
+push 到 main ──> Cloudflare 自动部署 Worker
+                  │
+用户点击「立即执行」
+        │
+        ▼
+Worker 调用 GitHub dispatches API
+        │
+        ▼
+GitHub Actions 启动 process.yml
+        │
+        ▼
+Python Runner 拉取配置 → 下载 → 转写 → 上传 → 回写
+```
+
+后续只需修改代码并 push,Worker 自动重新部署;控制台点击「立即执行」即可触发流水线。
+
+## 日志查看(调试用)
+
+### 1. Worker 实时日志(wrangler tail)
+
+本地或 CI 中执行:
+
+```bash
+npm run tail
+# 等价于 wrangler tail,实时输出所有请求日志
+```
+
+输出为结构化 JSON,便于过滤:
+
+```
+{"timestamp":"2026-07-06T12:00:00Z","event":"request","status":"ok","requestId":"abc-123","method":"POST","path":"/api/login","status":200,"duration":42}
+{"timestamp":"2026-07-06T12:00:05Z","event":"login","status":"success","requestId":"abc-123","duration":38}
+{"timestamp":"2026-07-06T12:00:10Z","event":"trigger","status":"success","requestId":"def-456","repo":"Sweizh/y2b","duration":120}
+{"timestamp":"2026-07-06T12:00:15Z","event":"pipeline_auth","status":"success","requestId":"ghi-789","path":"/api/pipeline/config"}
+{"timestamp":"2026-07-06T12:00:16Z","event":"pipeline_pull","status":"success","requestId":"ghi-789","channels":3,"manualQueue":2,"processed":42}
+{"timestamp":"2026-07-06T12:00:20Z","event":"pipeline_writeback","status":"success","requestId":"jkl-012","total":5,"success":4,"failed":1}
+```
+
+按 event 过滤:`wrangler tail | jq 'select(.event=="login")'`
+
+### 2. Cloudflare Dashboard Logs
+
+Worker 详情页 → Logs 标签:
+- 免费版:实时日志流,保留 3 小时
+- Workers Logs 付费版:长期保留,可搜索过滤
+
+### 3. GitHub Actions 日志
+
+仓库 → Actions 标签 → 点击某次 `YT2BILI Pipeline` 运行:
+- 每个 step 输出完整可见(checkout / setup-python / install ffmpeg / install deps / run pipeline)
+- Python Runner 输出结构化日志,与 Worker 日志格式一致
+- 失败时可直接定位到具体视频和失败阶段(download / asr / translate / upload)
+
+## 快速开始(首次使用)
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/Sweizh/y2b.git
+cd y2b
+
+# 2. 安装依赖
+npm install
+
+# 3. 本地启动(开发用)
+cp .dev.vars.example .dev.vars  # 编辑加密密钥
+npm run dev                      # http://localhost:8787
+
+# 4. 首次访问设置管理密码,记录 pipeline_token
+
+# 5. 部署到 Cloudflare
+npx wrangler secret put ENCRYPTION_KEY  # 输入 openssl rand -base64 32 生成的密钥
+npm run deploy
+
+# 6. 在 GitHub 仓库 Settings → Secrets 配置 WORKER_URL 和 PIPELINE_TOKEN
+
+# 7. 后台填配置 + 点测试 → 完成
+```
+
+## 失败通知字段说明
+
+`Config.notify_webhook` 字段用于配置失败通知 Webhook URL:
+
+- **企业微信群机器人**:`https://qyapi.weixin.com/cgi-bin/webhook/send?key=xxx`
+- **钉钉群机器人**:`https://oapi.dingtalk.com/robot/send?access_token=xxx`
+- **Server 酱**:`https://sctapi.ftqq.com/SCTxxxxx.send`
+
+启用后,Python Runner 在连续失败 ≥ 3 次时调用该 Webhook 发送告警,内容包括失败次数、Worker URL、时间。
 
 ## API 端点一览
 

@@ -10,30 +10,49 @@ import {
 
 const app = new Hono<{ Bindings: Env }>();
 
+function log(event: string, status: string, extra: Record<string, any> = {}) {
+  console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, status, ...extra }));
+}
+
 // 鉴权中间件
 app.use('*', async (c, next) => {
+  const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  const start = Date.now();
   const auth = c.req.header('Authorization') || '';
   const m = auth.match(/^Bearer\s+(.+)$/);
   if (!m) {
+    log('pipeline_auth', 'failed', { requestId, reason: 'no_bearer', path: new URL(c.req.url).pathname });
     return c.json({ error: '缺少 Authorization Bearer Token' }, 401);
   }
   const token = m[1];
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.pipeline_token) {
+    log('pipeline_auth', 'failed', { requestId, reason: 'no_token_configured' });
     return c.json({ error: 'pipeline_token 未配置' }, 500);
   }
   if (token !== cfg.pipeline_token) {
+    log('pipeline_auth', 'failed', { requestId, reason: 'invalid_token' });
     return c.json({ error: 'Pipeline Token 无效' }, 401);
   }
+  c.header('x-request-id', requestId);
+  log('pipeline_auth', 'success', { requestId, path: new URL(c.req.url).pathname, duration: Date.now() - start });
   await next();
 });
 
 // 拉取全部配置 + 频道 + 去重表 + 手动队列
 app.get('/config', async (c) => {
+  const start = Date.now();
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   const channels = await getChannels(c.env.YT2BILI_KV);
   const manualQueue = await getManualQueue(c.env.YT2BILI_KV);
   const processed = await getProcessed(c.env.YT2BILI_KV);
+  log('pipeline_pull', 'success', {
+    requestId: c.req.header('x-request-id'),
+    channels: channels.length,
+    manualQueue: manualQueue.length,
+    processed: Object.keys(processed).length,
+    duration: Date.now() - start,
+  });
   // 删除 admin_password 和 pipeline_token（敏感）
   const safeConfig = { ...cfg };
   delete safeConfig.admin_password;
@@ -129,6 +148,15 @@ app.post('/processed', async (c) => {
     putManualQueue(c.env.YT2BILI_KV, cleanedManualQueue),
     putStatus(c.env.YT2BILI_KV, status),
   ]);
+  const successCount = results.filter(r => r.status === 'success').length;
+  const failCount = results.length - successCount;
+  log('pipeline_writeback', 'success', {
+    requestId: c.req.header('x-request-id'),
+    total: results.length,
+    success: successCount,
+    failed: failCount,
+    cleaned_manual: manualQueue.length - cleanedManualQueue.length,
+  });
   return c.json({
     success: true,
     processed_count: results.length,

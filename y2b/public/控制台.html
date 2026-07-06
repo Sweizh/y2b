@@ -696,9 +696,9 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             <div class="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
               <label class="text-xs" style="color:var(--apple-muted-foreground)">字幕模式</label>
               <select class="h-8 px-2 rounded-lg text-xs" style="background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-                <option>翻译后上传中文字幕</option>
+                <option>上传翻译字幕</option>
                 <option>上传原语言字幕</option>
-                <option>双字幕</option>
+                <option>双语字幕</option>
                 <option>不上传字幕</option>
               </select>
             </div>
@@ -759,8 +759,9 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             <div class="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
               <label class="text-xs" style="color:var(--apple-muted-foreground)">字幕模式</label>
               <select class="h-8 px-2 rounded-lg text-xs" style="background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-                <option>翻译后上传中文字幕</option>
-                <option>双字幕</option>
+                <option>上传翻译字幕</option>
+                <option>上传原语言字幕</option>
+                <option>双语字幕</option>
                 <option>不上传字幕</option>
               </select>
             </div>
@@ -863,6 +864,51 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- 已处理视频列表 -->
+        <div class="mt-6">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold" style="color:var(--apple-foreground)">已处理视频列表</h3>
+            <p class="text-xs" style="color:var(--apple-muted-foreground)">删除条目后该视频可在下次运行时重新处理</p>
+          </div>
+          <div class="overflow-x-auto rounded-lg" style="border:1px solid var(--apple-border)">
+            <table class="w-full text-sm" style="min-width:680px">
+              <thead>
+                <tr style="background:var(--apple-background)">
+                  <th class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:160px">B 站标题</th>
+                  <th class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:120px">BV 号</th>
+                  <th class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:120px">频道</th>
+                  <th class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:90px">状态</th>
+                  <th class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:120px">处理时间</th>
+                  <th class="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:80px">操作</th>
+                </tr>
+              </thead>
+              <tbody id="processed-tbody">
+                <tr><td colspan="6" class="px-4 py-6 text-center text-xs" style="color:var(--apple-muted-foreground)">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 失败通知配置 -->
+        <div class="mt-6 rounded-lg p-4" style="background:var(--apple-background);border:1px solid var(--apple-border)">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-semibold" style="color:var(--apple-foreground)">失败通知</h3>
+              <p class="text-xs mt-0.5" style="color:var(--apple-muted-foreground)">Cookie 失效或流水线连续失败 ≥ 3 次时调用 Webhook 告警</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="notify-enabled" class="sr-only peer">
+              <div class="relative w-10 h-5 rounded-full transition-colors" style="background:var(--background-400)">
+                <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-all" style="background:var(--background-50)"></div>
+              </div>
+            </label>
+          </div>
+          <div class="flex items-center gap-3">
+            <input id="notify-webhook-url" type="text" placeholder="https://qyapi.weixin.com/cgi-bin/webhook/send?key=xxx 或 https://sctapi.ftqq.com/SCTxxxxx.send" class="flex-1 h-9 px-3 rounded-lg text-xs" style="background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)" disabled>
+            <button id="notify-save-btn" class="h-9 px-4 rounded-lg text-xs font-semibold shrink-0" style="background:var(--brand-500);color:var(--background-50)" disabled>保存</button>
+          </div>
         </div>
       </section>
 
@@ -1562,6 +1608,142 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     loadStatus();
     // 自动刷新
     setInterval(loadStatus,30000);
+
+    // ===== 已处理视频列表 =====
+    function loadProcessed(){
+      var tbody=document.getElementById('processed-tbody');
+      if(!tbody)return;
+      fetch('/api/processed',{credentials:'include'})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          var items=d.items||[];
+          if(items.length===0){
+            tbody.innerHTML='<tr><td colspan="6" class="px-4 py-6 text-center text-xs" style="color:var(--apple-muted-foreground)">暂无已处理视频</td></tr>';
+            return;
+          }
+          tbody.innerHTML='';
+          items.forEach(function(item){
+            var tr=document.createElement('tr');
+            tr.style.cssText='border-top:1px solid var(--apple-border)';
+            var dt=new Date(item.processed_at||0);
+            var timeStr=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0')+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
+            var statusBadge=item.status==='success'
+              ?'<span style="background:var(--state-success-surface);color:var(--state-success);padding:2px 8px;border-radius:12px;font-size:11px">成功</span>'
+              :'<span style="background:var(--state-error-surface);color:var(--state-error);padding:2px 8px;border-radius:12px;font-size:11px">失败'+(item.stage?' ('+escapeHtml(item.stage)+')':'')+'</span>';
+            tr.innerHTML='<td class="px-4 py-3 text-xs truncate" style="color:var(--apple-foreground);max-width:200px">'+escapeHtml(item.title||item.video_id)+'</td>'+
+              '<td class="px-4 py-3 text-xs font-mono whitespace-nowrap" style="color:var(--apple-muted-foreground)">'+escapeHtml(item.bvid||'--')+'</td>'+
+              '<td class="px-4 py-3 text-xs truncate" style="color:var(--apple-foreground);max-width:140px">'+escapeHtml(item.channel||'--')+'</td>'+
+              '<td class="px-4 py-3">'+statusBadge+'</td>'+
+              '<td class="px-4 py-3 text-xs font-mono whitespace-nowrap" style="color:var(--apple-muted-foreground)">'+timeStr+'</td>'+
+              '<td class="px-4 py-3 text-right"><button class="processed-del-btn" data-video-id="'+escapeHtml(item.video_id)+'" aria-label="删除" style="padding:6px 10px;border-radius:6px;background:transparent;border:1px solid var(--apple-border);color:var(--state-error);cursor:pointer;font-size:11px;min-height:32px">删除</button></td>';
+            tbody.appendChild(tr);
+          });
+          // 绑定删除事件(事件委托)
+          tbody.onclick=function(e){
+            var btn=e.target.closest('.processed-del-btn');
+            if(!btn)return;
+            var videoId=btn.dataset.videoId;
+            var row=btn.closest('tr');
+            showModal({
+              title:'确认删除',
+              body:'删除后该视频可在下次流水线运行时重新处理。确认删除?',
+              okText:'删除',
+              onOk:function(){
+                fetch('/api/processed/'+encodeURIComponent(videoId),{method:'DELETE',credentials:'include'})
+                  .then(function(r){return r.json();})
+                  .then(function(d){
+                    if(d.error){
+                      showToast(d.error,'error');
+                    }else{
+                      showToast('已删除,该视频可在下次运行时重新处理','success');
+                      if(row)row.parentNode.removeChild(row);
+                    }
+                  })
+                  .catch(function(e){showToast('删除失败:'+(e.message||e),'error');});
+              }
+            });
+          };
+        })
+        .catch(function(e){
+          console.warn('[loadProcessed]',e);
+          tbody.innerHTML='<tr><td colspan="6" class="px-4 py-6 text-center text-xs" style="color:var(--apple-muted-foreground)">加载失败</td></tr>';
+        });
+    }
+    loadProcessed();
+    setInterval(loadProcessed,30000);
+
+    // ===== 失败通知配置 =====
+    var notifySwitch=document.getElementById('notify-enabled');
+    var notifyUrlInput=document.getElementById('notify-webhook-url');
+    var notifySaveBtn=document.getElementById('notify-save-btn');
+    var notifySwitchWrap=notifySwitch?notifySwitch.parentElement.querySelector('div.relative'):null;
+
+    function setNotifySwitchUI(on){
+      if(!notifySwitchWrap)return;
+      var knob=notifySwitchWrap.querySelector('div.absolute');
+      notifySwitchWrap.style.background=on?'var(--brand-500)':'var(--background-400)';
+      knob.classList.remove('left-0.5','right-0.5');
+      knob.classList.add(on?'right-0.5':'left-0.5');
+      if(notifyUrlInput)notifyUrlInput.disabled=!on;
+      if(notifySaveBtn)notifySaveBtn.disabled=!on;
+    }
+
+    if(notifySwitch){
+      notifySwitch.addEventListener('change',function(){
+        setNotifySwitchUI(notifySwitch.checked);
+      });
+      // 整个开关 wrap 可点
+      if(notifySwitchWrap){
+        notifySwitchWrap.addEventListener('click',function(e){
+          e.preventDefault();
+          notifySwitch.checked=!notifySwitch.checked;
+          setNotifySwitchUI(notifySwitch.checked);
+        });
+      }
+    }
+
+    // 保存按钮
+    if(notifySaveBtn){
+      notifySaveBtn.addEventListener('click',function(){
+        var url=notifySwitch&&notifySwitch.checked?(notifyUrlInput.value.trim()):'';
+        if(notifySwitch&&notifySwitch.checked&&!url){
+          showToast('请输入 Webhook URL','error');
+          return;
+        }
+        setBtnLoading(notifySaveBtn,true,'保存中…');
+        fetch('/api/config',{
+          method:'PUT',
+          credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({notify_webhook:url})
+        })
+        .then(function(r){return r.json();})
+        .then(function(d){
+          setBtnLoading(notifySaveBtn,false);
+          if(d.error)showToast(d.error,'error');
+          else showToast('失败通知配置已保存','success');
+        })
+        .catch(function(e){
+          setBtnLoading(notifySaveBtn,false);
+          showToast('保存失败:'+(e.message||e),'error');
+        });
+      });
+    }
+
+    // 从 /api/config 读取回显
+    fetch('/api/config',{credentials:'include'})
+      .then(function(r){return r.json();})
+      .then(function(cfg){
+        var url=cfg.notify_webhook||'';
+        if(url){
+          if(notifySwitch)notifySwitch.checked=true;
+          if(notifyUrlInput)notifyUrlInput.value=url;
+          setNotifySwitchUI(true);
+        }else{
+          setNotifySwitchUI(false);
+        }
+      })
+      .catch(function(e){console.warn('[notify load]',e);});
   }
 
   // ===== 手动添加视频 =====
