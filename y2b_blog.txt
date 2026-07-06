@@ -1,0 +1,6310 @@
+YT2BILI — YouTube 到 Bilibili 自动化搬运系统
+主页
+文章
+友链
+登录 / 注册
+Sweizh's  blog
+主页
+文章
+友链
+搜索
+Sweizh
+我是一段主页描述
+标签
+飞牛NAS
+2
+技术
+1
+博客
+1
+助手
+1
+miclaw
+1
+AI
+1
+网络搭建
+1
+Linux
+1
+SMB
+1
+1
+YT2BILI — YouTube 到 Bilibili 自动化搬运系统
+目录
+1. 项目概述
+1.1 一句话描述
+1.2 核心能力
+1.3 适用场景
+2. 系统架构
+2.1 架构总览
+2.2 设计原则
+3. 技术选型
+3.1 技术栈一览
+3.2 B 站鉴权方案：纯 Cookie 方式
+4. 核心流程
+4.1 流水线执行流程
+4.2 触发方式
+4.3 处理数量决定逻辑
+5. Web 管理后台
+5.1 设计原则
+5.2 页面区块
+5.3 管理密码重置
+6. 配置项总览
+6.1 Web 后台填写（存入 Cloudflare KV config 键）
+6.2 频道配置（每条记录，存入 KV channels 键）
+6.3 GitHub Secrets（仓库设置中填写）
+6.4 Cloudflare 控制台操作
+6.5 自动生成的项（无需手动填写）
+6.6 投稿参数来源说明
+7. B 站 API 接口清单
+7.1 鉴权方式
+7.2 接口列表
+7.3 稿件提交参数
+7.4 CC 字幕提交参数
+7.5 合集追加参数
+8. Cookie 自动续期机制
+8.1 原理
+8.2 刷新流程
+8.3 集成到流水线
+8.4 KV 回写失败处理（关键安全机制）
+8.5 失效兜底
+8.6 并发保护
+8.7 用户维护频率
+9. GitHub Actions 流水线
+9.1 Workflow 触发定义
+9.2 执行步骤
+9.3 环境变量
+10. Cloudflare Worker API
+10.1 认证方式
+10.2 接口列表
+10.3 Pipeline Config 响应结构
+10.4 Status 响应结构
+11. Cloudflare KV 存储设计
+11.1 KV 限制
+11.2 Key 设计
+11.3 写入优化策略
+11.4 去重表裁剪逻辑
+12. 约束与限制
+12.1 GitHub Actions
+12.2 Cloudflare KV
+12.3 YouTube
+12.4 B 站
+12.5 YouTube Data API v3
+13. 部署指南
+13.0 前置准备清单
+13.1 部署流程（只需做一次）
+13.2 本地开发
+14. 日常运维
+14.1 常见操作指南
+14.2 Cookie 失效检测
+14.3 监控要点
+14.4 yt-dlp 时效性维护
+15. 项目目录结构
+16. ASR 与翻译 HTTPS 调用详解
+16.1 整体数据流
+16.2 ASR（语音识别）调用
+16.3 LLM 翻译调用
+16.4 错误处理与重试
+16.5 从 SRT 转为 B 站字幕格式
+16.6 完整调用链路
+16.7 超时与资源规划
+17. 安全说明
+17.1 敏感数据存储
+17.2 传输安全
+17.3 访问控制
+17.4 GitHub PAT 最小权限
+18. 故障排查
+18.1 决策树
+18.2 常见错误码
+18.3 查看详细日志
+19. FAQ
+20. 成本估算
+20.1 免费额度消耗
+20.2 ASR/翻译 API 成本
+21. 升级与备份
+21.1 升级指南
+21.2 备份与恢复
+21.3 回滚
+22. 术语表
+附录：技术决策记录
+A1. 为什么选择纯 Cookie 而非官方开放 API
+A2. 为什么选择 Cloudflare KV 而非 D1
+A3. 为什么用批量回写而非逐条回写
+A4. 为什么不让 LLM 负责时间戳
+约 19,500 字
+65 分钟
+YT2BILI — YouTube 到 Bilibili 自动化搬运系统
+-
+-
+无标签
+摘要
+YT2BILI v1.5 是一套 YouTube 到 Bilibili 的自动化搬运系统。基于 Cloudflare Workers 与 GitHub Actions，系统自动下载视频，通过 MiMo ASR 和 stable-ts 进行转录对齐，利用 LLM 翻译，并自动投稿 B 站。v1.5 版本修复了 26 项审核问题，优化了验证逻辑、队列清理及超时机制。
+YT2BILI — YouTube 到 Bilibili 自动化搬运系统
+项目文档 v1.5
+适用于公司矩阵号自有视频的自动转录、翻译与投稿 最后更新：2026-07-06
+版本
+日期
+变更摘要
+v1.0
+2026-07-06
+初始版本
+v1.1
+2026-07-06
+修复 ac_time_value 获取方式、音频/视频下载逻辑、安全设计、LLM 时间戳保护等 37 项问题；新增安全说明、故障排查、FAQ、成本估算、升级与备份、术语表等章节
+v1.2
+2026-07-06
+ASR 对接改为 MiMo
+mimo-v2.5-asr
+API；新增 ffmpeg 静音分段方案解决时间戳问题；更新接口格式、认证方式、10MB 限制处理、超时规划
+v1.3
+2026-07-06
+时间戳方案升级为 stable-ts 强制对齐（±0.2s 词级精度）；新增字幕模式开关（翻译/原语言/双字幕/无字幕）；新增手动添加视频功能
+v1.4
+2026-07-06
+修复第三轮审核 22 项问题：手动队列状态生命周期+清理机制；MAX_VIDEOS_PER_RUN 三处矛盾统一；Whisper 模型缓存+单例加载；format_timestamp 浮点进位 bug；srt_to_bili_subtitle lan 参数化；§16.3 翻译前置条件；MiMo ASR MIME 动态选择；ffmpeg 切分精度修复；超时表补充环境安装/模型下载时间
+v1.5
+2026-07-06
+修复第四轮审核 26 项问题：validate_response 拆分为 ASR/翻译独立校验；手动队列清理逻辑分类明确；超时统一为 300 分钟；stage 字段三处统一为过去式；channel_id 语义冲突改为 channel_config_id；Pipeline POST 请求体结构定义；source_language 参数化+stable-ts 多语言映射；翻译条数不匹配自动拆分重试；Cookie Artifact 安全提示；processing 卡死保护；流水线各环节重试策略；部署指南补 wrangler 安装；动态裁剪算法；备份补全 manual_queue/status 键
+目录
+项目概述
+系统架构
+技术选型
+核心流程
+Web 管理后台
+配置项总览
+B 站 API 接口清单
+Cookie 自动续期机制
+GitHub Actions 流水线
+Cloudflare Worker API
+Cloudflare KV 存储设计
+约束与限制
+部署指南
+日常运维
+项目目录结构
+ASR 与翻译 HTTPS 调用详解
+安全说明
+故障排查
+FAQ
+成本估算
+升级与备份
+术语表
+附录：技术决策记录
+1. 项目概述
+1.1 一句话描述
+在 Web 后台填好所有配置后，系统定时自动从 YouTube 下载公司频道的新视频，通过 ASR 转录为字幕、LLM 翻译为中文，自动投稿到 B 站指定合集并挂载 CC 字幕，全程无需人工干预。
+1.2 核心能力
+能力
+说明
+YouTube 频道订阅
+支持搜索添加或手动添加 YouTube 频道，按频道配置独立的 B 站投稿参数
+自动下载
+通过 yt-dlp 下载完整视频文件（供投稿）并提取音轨（供 ASR），支持 Cookie 下载受限内容
+语音识别
+调用 MiMo
+mimo-v2.5-asr
+API 转录文本，stable-ts 强制对齐生成词级时间戳（±0.2s），输出 SRT 字幕
+LLM 翻译
+调用用户自有的 HTTPS 翻译 API，翻译字幕和标题，保持时间轴对齐（可按频道开关翻译）
+B 站自动投稿
+视频上传 + 标题 + 分区 + 标签 + 简介 + 封面，纯 Cookie 鉴权
+CC 字幕上传
+通过
+submit_subtitle
+接口上传中文字幕，语言代码
+zh-Hans
+合集归档
+投稿后自动将视频追加到指定合集的小节中
+Cookie 自动续期
+利用
+ac_time_value
+令牌自动刷新 B 站 Cookie，减少手动维护
+Web 管理后台
+单页配置所有信息，频道搜索、合集/分区下拉选择、状态监控、连通性测试
+YouTube 频道搜索
+通过 YouTube Data API v3 在后台搜索频道，无需手动查找 channel_id
+1.3 适用场景
+公司矩阵号自有 YouTube 内容同步到 B 站
+需要中文字幕的海外视频搬运
+多频道、多合集的批量管理
+2. 系统架构
+2.1 架构总览
+纯文本
+┌──────────────────────────────────────────────────────────┐
+│                    Web 管理后台 (单页)                     │
+│                  Cloudflare Workers + KV                  │
+│                                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
+│  │ 账号凭证  │ │ AI 服务   │ │ 频道管理  │ │ 运行状态  │   │
+│  │ B站Cookie │ │ ASR API  │ │ 搜索频道  │ │ 处理记录  │   │
+│  │ YT Cookie │ │ 翻译API  │ │ 选合集    │ │ 立即执行  │   │
+│  │ GitHub    │ │          │ │ 选分区    │ │ 连通测试  │   │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
+│                       │                                  │
+│         KV 存储：config / channels / processed / status  │
+└───────────────────────┬──────────────────────────────────┘
+│ 拉取配置 / 回写状态
+▼
+┌──────────────────────────────────────────────────────────┐
+│              GitHub Actions Runner (定时/手动)            │
+│                                                          │
+│  Cookie续期 → 轮询YT RSS → yt-dlp下载视频+音频            │
+│  → ASR转录 → LLM翻译 → B站投稿 → CC字幕 → 合集归档        │
+│  → 批量回写KV                                            │
+│                                                          │
+│  外部服务：YouTube RSS / 用户ASR API / 用户翻译API /      │
+│           B站创作者API                                    │
+└──────────────────────────────────────────────────────────┘
+注意
+：Cookie 续期在流水线最前面执行（详见 §8），确保后续所有 B 站操作使用有效凭证。上图中 Cookie 续期排在 RSS 轮询之前。
+2.2 设计原则
+原则
+说明
+配置与执行分离
+控制平面（Worker+KV）管理配置，数据平面（Actions）执行流水线
+零服务器
+全部基于免费 Serverless 服务，无需自建服务器
+单页配置
+所有填写项集中在同一页面，降低小白用户使用门槛
+持续部署
+代码推送主分支即自动部署 Worker，无需手动操作
+幂等处理
+通过去重表保证视频不会被重复处理
+时间戳安全
+ASR 产生的时间戳在翻译过程中不被 LLM 篡改（详见 §16.3.4）
+3. 技术选型
+3.1 技术栈一览
+层级
+技术
+用途
+Web 后台
+Cloudflare Workers + Hono 框架
+API 服务 + 静态页面托管
+数据存储
+Cloudflare KV
+配置/频道/状态/去重表
+前端
+原生 HTML/CSS/JS（单文件）
+管理界面，无框架依赖
+流水线执行
+GitHub Actions
+定时调度 + 任务执行
+视频下载
+yt-dlp（Python）
+YouTube 视频下载 + 音轨提取
+音频处理
+ffmpeg
+从视频中提取音轨、长音频切分
+语音识别
+MiMo
+mimo-v2.5-asr
+API
+音频转文本（纯文本转录）
+时间戳对齐
+stable-ts（Python）
+强制对齐文本到音频，生成词级时间戳
+翻译
+用户自有 HTTPS LLM API
+字幕+标题翻译
+B 站投稿
+bilibili-api-python / 直接 HTTP
+视频/字幕/合集操作
+YouTube 搜索
+YouTube Data API v3
+频道搜索
+3.2 B 站鉴权方案：纯 Cookie 方式
+经过官方开放平台 API 与非官方 Cookie 方式的对比评估，选择
+纯 Cookie 方式
+（决策详情见附录 A1）：
+决策因素
+说明
+入驻门槛
+官方开放平台需企业资质申请，Cookie 方式零门槛
+功能完整
+Cookie 方式支持投稿+字幕+合集全部功能；官方 API 缺少 CC 字幕和合集接口
+自动续期
+通过
+ac_time_value
+实现自动续期，减少手动维护
+稳定性
+社区逆向 API 成熟（bilibili-API-collect），长期维护
+4. 核心流程
+4.1 流水线执行流程
+纯文本
+1. Runner 启动
+↓
+2. 从 Worker KV 拉取全部配置（1次 HTTP 请求，带重试）
+- B站凭证 (SESSDATA / bili_jct / buvid3 / ac_time_value)
+- ASR API 地址 + 密钥
+- 翻译 API 地址 + 密钥
+- YouTube Cookie (可选，存于 config 内)
+- 所有已启用频道列表
+- 已处理视频 ID 去重表
+↓
+3. Cookie 自动续期检查（详见 §8）
+- check_refresh() → 判断是否需要刷新
+- 需要则 refresh() → 获取新凭证
+- 刷新成功 → 回写 KV（带多次重试，失败则兜底保存到 Artifact）
+↓
+4. 逐个频道轮询 YouTube RSS
+- 请求 /feeds/videos.xml?channel_id=xxx
+- 拿到该频道最近约15条视频
+- 与去重表做差集 → 得到"新视频"列表
+↓
+5. 汇总待处理视频
+- 优先处理手动队列中的视频（区块 5 添加的，不受 MAX_VIDEOS_PER_RUN 限制）
+- 然后处理 RSS 发现的新视频
+- 上限保护：RSS 发现的视频单次最多处理 MAX_VIDEOS_PER_RUN 个（默认 5）
+- 按预估总时长动态裁剪：长视频减少单次处理量
+- 手动队列 + RSS 新视频超出 GitHub Actions 配置超时（300 分钟）的部分留到下次 cron
+↓
+6. 逐个视频处理（根据频道配置的 subtitle_mode 决定是否翻译）：
+┌─ ① 下载视频 + 提取音频
+│   yt-dlp 下载最佳视频+音频合并 → video.mp4（供投稿）
+│   ffmpeg -i video.mp4 -vn -acodec libmp3lame audio.mp3（供 ASR）
+│   如有 YouTube Cookie，加 --cookies 参数
+│
+├─ ② 语音识别 + 时间戳对齐
+│   MiMo ASR 转录 → 纯文本
+│   stable-ts 强制对齐 → 词级时间戳 → 句子级 SRT
+│
+├─ ③ 翻译（根据 subtitle_mode 决定）
+│   - subtitle_mode = "translated" 或 "both"：
+│     POST 翻译API → 中文字幕(保持时间轴) + 中文标题
+│     时间戳严格保留 ASR 原始值，仅替换文本（详见 §16.3.4）
+│   - subtitle_mode = "original" 或 "none"：
+│     跳过翻译，标题保留原文
+│
+├─ ④ 投稿B站
+│   bilibili-api-python 上传视频文件
+│   - 标题 = 翻译后的中文标题（如翻译）/ 原标题（如不翻译）
+│   - 分区 = 频道配置的 tid
+│   - 标签 = 频道配置的默认标签（详见 §6.6）
+│   - 简介 = 按模板生成（含原视频链接）
+│   - 封面 = YouTube 缩略图 URL
+│   - copyright = 频道配置（自有内容建议=1 自制，搬运=2 转载）
+│   → 返回 bvid + aid + cid
+│
+├─ ⑤ 上传CC字幕（根据 subtitle_mode 决定）
+│   - "translated"：上传中文字幕（lan="zh-Hans"）
+│   - "original"：上传原语言字幕（lan="en" 等）
+│   - "both"：先上传原语言字幕，再上传中文字幕
+│   - "none"：跳过字幕上传
+│
+├─ ⑥ 加入合集
+│   season/section/episodes/add
+│   - section_id = 频道配置的合集小节
+│   - episodes = [{aid, cid, title, charging_pay}]
+│   → 视频自动归入指定合集
+│
+└─ ⑦ 记录结果到本地累积列表（含处理阶段 stage 字段）
+※ 单视频失败不阻塞后续视频，记录失败原因和中断阶段后继续
+※ 投稿间加随机延迟 5-15 秒，避免触发 B 站风控
+※ 各环节重试策略：
+- ① 下载：yt-dlp 失败重试 2 次（内置 --retries 3）
+- ② ASR + 对齐：call_with_retry 包装，3 次指数退避（见 §16.4）
+- ③ 翻译：call_with_retry 包装，3 次指数退避 + 条数不匹配自动拆分（见 §16.3.4）
+- ④ 投稿上传：失败重试 2 次，间隔 30 秒
+- ⑤ 字幕上传：失败重试 2 次，B 站改版类错误不重试
+- ⑥ 合集追加：失败重试 1 次（非关键步骤，失败仅记录不影响投稿结果）
+↓
+7. 全部处理完毕，批量回写 Worker KV
+- POST /api/pipeline/processed (批量更新去重表，含裁剪逻辑保留近500条)
+- POST /api/pipeline/status (更新运行状态)
+= 仅 2 次写入，远低于 KV 限额
+4.2 触发方式
+方式
+触发源
+说明
+定时自动
+GitHub Actions cron
+每 4 小时一次（频率可在
+.github/workflows/process.yml
+中修改），GitHub 调度服务触发
+手动触发
+Web 后台 → Worker → GitHub API
+点击"立即执行"，通过
+repository_dispatch
+事件触发（异步，前端轮询状态页）
+GitHub 页面
+workflow_dispatch
+在 GitHub Actions 页面手动运行
+三种方式启动的是同一个 Workflow，执行逻辑完全一致。Workflow 配置了
+concurrency
+组，确保同一时刻只有一个流水线在运行，避免 Cookie 续期并发冲突（详见 §8.6）。
+4.3 处理数量决定逻辑
+纯文本
+待处理视频 = 手动队列视频（不受限制，优先处理） + RSS 新视频
+RSS 新视频处理数量 = min(所有频道 RSS 新视频之和, MAX_VIDEOS_PER_RUN)
+示例：
+手动队列: 2 个视频（优先处理，不计入 MAX_VIDEOS_PER_RUN）
+频道A: RSS有2条新视频
+频道B: 无新视频
+频道C: 1条新视频
+→ 本次处理 2(手动) + min(3, 5) = 2 + 3 = 5 个视频
+手动队列优先
+：手动队列中的视频不受
+MAX_VIDEOS_PER_RUN
+限制，但手动队列 + RSS 新视频的总处理时长受 GitHub Actions 配置超时（
+timeout-minutes: 300
+，即 5 小时）约束。若手动队列积压较多，Runner 会优先处理手动队列，RSS 新视频推迟到下次 cron。
+动态裁剪
+：若新视频预估总时长较长（如多个 1 小时视频），Runner 会根据
+timeout-minutes: 300
+的限制动态减少单次处理量，避免超时。长视频（>30 分钟）建议单独串行处理。
+动态裁剪算法
+：
+Python
+# 预估每个视频的处理耗时（基于视频时长）
+def
+estimate_processing_time
+(
+duration_minutes
+):
+"""
+根据视频时长预估处理耗时（分钟）
+"""
+if
+duration_minutes
+<=
+10
+:
+return
+10
+# 短视频：下载+ASR+对齐+翻译+上传
+elif
+duration_minutes
+<=
+30
+:
+return
+duration_minutes
+*
+0.8
+# 中等视频
+else
+:
+return
+duration_minutes
+*
+0.7
++
+10
+# 长视频：ASR分段+对齐更耗时
+# 动态裁剪：确保总预估时间不超过预算
+TIME_BUDGET
+=
+270
+# 300分钟超时 - 30分钟余量（环境安装+模型加载）
+selected
+=
+[]
+total_est
+=
+0
+for
+video
+in
+sorted_videos
+:
+# 按时长从短到长排序
+est
+=
+estimate_processing_time
+(
+video
+.
+duration
+)
+if
+total_est
++
+est
+>
+TIME_BUDGET
+:
+break
+# 超出预算，停止添加
+selected
+.
+append
+(
+video
+)
+total_est
++=
+est
+5. Web 管理后台
+5.1 设计原则
+单页配置
+：所有填写项在同一页面分区块展示，不跳转
+搜索代替手填
+：频道通过搜索添加，合集和分区通过下拉框选择
+脱敏回显
+：Cookie/Key 回显时显示
+xxxx****xxxx
+，不暴露明文
+状态可视化
+：处理记录带状态色标（绿=成功，红=失败+原因+中断阶段）
+初始化引导
+：首次访问引导设置管理密码
+连通性测试
+：每个凭证/API 配"测试"按钮，即时验证有效性
+密码可重置
+：忘记密码可通过 wrangler 命令行重置（详见 §5.3）
+5.2 页面区块
+区块 1：账号凭证
+配置项
+说明
+必填
+管理密码
+后台登录密码，首次初始化时设置（bcrypt 哈希存储）
+是
+B 站 SESSDATA
+B 站登录 Cookie
+是
+B 站 bili_jct
+CSRF Token
+是
+B 站 buvid3
+设备标识 Cookie
+是
+B 站 ac_time_value
+Cookie 自动续期令牌（来自 LocalStorage，非 Cookie）
+是
+YouTube API Key
+YouTube Data API v3 Key
+否（不用搜索可不填）
+YouTube Cookie
+Netscape 格式 Cookie 文件内容
+否（仅下载受限视频时需要）
+GitHub Token
+Fine-grained PAT（仅授权目标仓库的 Actions:write + Metadata:read）
+是
+GitHub 仓库
+仓库全名，如
+yourname/yt2bili
+是
+每项凭证旁均有"测试"按钮：B 站 Cookie 测登录态、YouTube API Key 测搜索、GitHub Token 测触发权限。
+区块 2：AI 服务接口
+配置项
+说明
+必填
+语音识别 API 地址
+MiMo ASR 端点（默认
+https://api.xiaomimimo.com/v1/chat/completions
+）
+是
+语音识别 API 密钥
+MiMo API Key
+是
+翻译 API 地址
+LLM 翻译服务 HTTPS 接口 URL
+是
+翻译 API 密钥
+翻译服务鉴权 key
+是
+每项 API 旁均有"测试"按钮：发送小样本请求验证连通性和返回格式。
+区块 3：频道管理
+方式一：搜索添加（推荐）
+纯文本
+输入关键词（如公司频道名）→ 点"搜索"
+→ 系统调用 YouTube Data API v3 搜索频道
+→ 显示匹配的 YouTube 频道卡片（头像 + 名称 + 订阅数 + 描述）
+→ 点"关注"
+→ 系统自动填好 channel_id 和频道名
+→ 选择：
+① 投稿到哪个 B 站合集（下拉框，自动拉取 B 站账号下的所有合集）
+② 投稿分区（下拉框，通过 /api/tids 拉取 B 站分区列表）
+③ 默认标签（文本框，逗号分隔）
+④ 投稿类型（自制 copyright=1 / 转载 copyright=2）
+⑤ 字幕模式（下拉框）：
+- 翻译后上传中文字幕（默认）
+- 上传原语言字幕（不翻译）
+- 双字幕（原语言+中文翻译）
+- 不上传字幕
+→ 点"保存"
+若合集下拉框为空，提示"请先到 B 站创作者后台创建合集与小节"，并附跳转链接。
+方式二：手动添加
+纯文本
+粘贴 YouTube 频道 ID + 填名称
+→ 选合集 → 选分区 → 填标签 → 选投稿类型 → 选字幕模式 → 保存
+每个频道可单独配置不同的合集、分区、标签、投稿类型和字幕模式，可随时启用/停用/删除。
+区块 4：运行状态
+无需填写，自动展示：
+上次运行时间
+累计处理视频数
+最近处理记录（频道 + 视频标题 + 状态 + 时间 + 失败原因 + 中断阶段）
+"立即执行"按钮（手动触发流水线，点击后弹窗提示"已触发，请稍后刷新查看结果"）
+已处理视频列表（支持删除单条以触发重新处理）
+失败通知开关（可选配置 Webhook/Server酱 URL，Cookie 失效或连续失败时主动告警）
+区块 5：手动添加视频
+除了通过频道订阅自动发现视频外，还可以手动添加特定视频进行处理：
+纯文本
+输入 YouTube 视频 URL（每行一个，支持多行批量添加）
+→ 选择目标频道配置（复用已有频道的合集/分区/标签/字幕模式设置）
+→ 或单独指定合集/分区/字幕模式
+→ 点"添加到队列"
+→ 视频进入手动处理队列，下次流水线执行时优先处理
+支持的 URL 格式（每行一个）：
+格式
+示例
+说明
+完整 URL
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+标准格式
+短链接
+https://youtu.be/dQw4w9WgXcQ
+YouTube 短链接
+纯视频 ID
+dQw4w9WgXcQ
+11 位视频 ID，系统自动补全 URL
+带时间戳
+https://youtu.be/dQw4w9WgXcQ?t=120
+自动去除时间戳参数
+功能
+说明
+批量添加
+支持多行 URL，每行一个（URL、短链接或纯 ID 均可）
+配置复用
+可选择已有频道配置，自动继承合集/分区/标签/字幕模式
+独立配置
+也可为手动视频单独指定合集/分区/字幕模式
+优先处理
+手动队列中的视频在下次流水线执行时优先于 RSS 发现的视频
+队列管理
+可查看队列（含状态色标）、删除待处理项、查看已处理结果
+去重保护
+手动添加的视频处理后会进入去重表，不会重复处理
+重新处理
+已处理视频可通过"删除已处理记录 → 重新添加到手动队列"触发再次处理
+失败重试
+处理失败的可重试项自动保留在队列中（最多重试 3 次），详见 §10.3 状态生命周期
+手动添加的视频不受
+MAX_VIDEOS_PER_RUN
+限制，但受 GitHub Actions 配置超时（
+timeout-minutes: 300
+，即 5 小时）约束。建议手动队列不超过 10 个视频，避免单次流水线超时。
+5.3 管理密码重置
+若忘记管理密码，可通过以下命令重置：
+bash
+# 安装 wrangler CLI（如尚未安装）
+npm
+install
+-g
+wrangler
+# 登录 Cloudflare
+wrangler
+login
+# 删除 admin_password 键，使后台回到初始化状态
+wrangler
+kv:key
+delete
+--binding=YT2BILI_KV
+"
+config
+"
+# 或只重置密码（需先读取 config JSON，修改 password 字段后写回）
+wrangler
+kv:key
+get
+--binding=YT2BILI_KV
+"
+config
+"
+>
+config.json
+# 编辑 config.json，将 admin_password 改为新密码的 bcrypt 哈希
+wrangler
+kv:key
+put
+--binding=YT2BILI_KV
+"
+config
+"
+--path=config.json
+注意
+：删除
+config
+键会清除所有配置，需重新初始化。建议只修改
+admin_password
+字段。
+6. 配置项总览
+6.1 Web 后台填写（存入 Cloudflare KV
+config
+键）
+分类
+配置项
+获取方式
+必填
+管理
+admin_password
+自定义（bcrypt 哈希存储）
+是
+B 站凭证
+bili_sessdata
+浏览器 F12 → Application → Cookies → bilibili.com → SESSDATA
+是
+B 站凭证
+bili_jct
+同上 → bili_jct
+是
+B 站凭证
+bili_buvid3
+同上 → buvid3
+是
+B 站凭证
+ac_time_value
+F12 → Console → 输入
+window.localStorage.ac_time_value
+→ 回车复制（
+非 Cookie，来自 LocalStorage
+）
+是
+YouTube
+yt_api_key
+Google Cloud Console → 启用 YouTube Data API v3 → 创建 API Key
+否
+YouTube
+yt_cookies
+浏览器扩展（如 "Get cookies.txt"）导出 Netscape 格式
+否
+GitHub
+gh_token
+GitHub Settings → Developer settings → Fine-grained PAT → 仅授权目标仓库 Actions:write + Metadata:read
+是
+GitHub
+gh_repo
+仓库全名
+是
+ASR
+asr_api
+MiMo ASR 端点：
+https://api.xiaomimimo.com/v1/chat/completions
+是
+ASR
+asr_key
+MiMo API Key（控制台 → API Key 管理）
+是
+翻译
+translate_api
+用户自有翻译服务地址
+是
+翻译
+translate_key
+用户自有翻译服务密钥
+是
+通知
+notify_webhook
+Server酱/Webhook URL（可选）
+否
+凭证获取详细教程见 §13.0 前置准备。
+6.2 频道配置（每条记录，存入 KV
+channels
+键）
+字段
+说明
+示例
+id
+记录唯一标识（系统自动生成 UUID）
+a1b2c3d4-...
+channel_id
+YouTube 频道 ID
+UC_xxxxxxxx
+name
+频道显示名称
+公司官方频道
+season_id
+B 站合集 ID（下拉框选择）
+3541247
+section_id
+合集小节 ID（下拉框选择）
+3954033
+tid
+B 站投稿分区（下拉框选择）
+122
+tags
+默认标签（逗号分隔）
+科技,翻译,YouTube
+copyright
+投稿类型：1=自制，2=转载
+1
+subtitle_mode
+字幕模式：
+translated
+=翻译后上传中文字幕，
+original
+=上传原语言字幕，
+both
+=双字幕，
+none
+=不上传字幕
+translated
+enabled
+是否启用
+true
+section_id
+（频道配置，snake_case）对应 B 站 API 请求中的
+sectionId
+（camelCase），代码层做映射。
+6.3 GitHub Secrets（仓库设置中填写）
+Secret 名称
+说明
+WORKER_URL
+Cloudflare Worker 部署后的域名
+PIPELINE_TOKEN
+Pipeline API 鉴权 Token（后台自动生成，存于 KV
+config.pipeline_token
+，需复制此值到 GitHub Secret）
+关系说明
+：KV 中的
+pipeline_token
+（小写）是后台自动生成的 Token 值；GitHub Secrets 中的
+PIPELINE_TOKEN
+（大写）是该值的副本，供 Runner 读取。两者值相同，初始化后需手动复制。
+6.4 Cloudflare 控制台操作
+操作
+说明
+创建 KV 命名空间
+Dashboard → Workers & Pages → KV → 创建，ID 填入
+wrangler.toml
+设置加密主密钥
+执行
+wrangler secret put ENCRYPTION_KEY
+，输入 32 字节随机字符串（用于 AES-GCM 加密敏感字段）
+连接 Git 仓库
+Dashboard → Workers → 连接 GitHub 仓库，主分支推送后自动部署
+6.5 自动生成的项（无需手动填写）
+配置项
+说明
+pipeline_token
+首次初始化时自动生成（32 字节随机 Token），用于 Runner 鉴权拉取配置。初始化成功页展示一次，后续可在后台"系统设置"中查看或重置
+已处理视频去重表
+流水线运行时自动维护
+6.6 投稿参数来源说明
+投稿参数
+来源
+说明
+title
+按
+subtitle_mode
+分支决定
+translated
+/
+both
+：翻译 API 返回的中文标题；
+original
+/
+none
+：YouTube 原始标题
+tid
+频道配置
+B 站投稿分区
+tag
+频道配置
+tags
+默认标签，逗号分隔
+desc
+模板生成
+含原视频链接、频道名、翻译说明
+cover
+YouTube 缩略图
+https://img.youtube.com/vi/{videoId}/maxresdefault.jpg
+copyright
+频道配置
+1=自制（公司自有内容），2=转载
+source
+YouTube 视频 URL
+转载时填写
+no_reprint
+默认 0
+允许转载
+videos
+上传后获得
+已上传视频文件引用
+7. B 站 API 接口清单
+7.1 鉴权方式
+所有接口使用 Cookie 鉴权：
+纯文本
+Cookie: SESSDATA=xxx; bili_jct=xxx; buvid3=xxx
+bili_jct
+兼作 CSRF Token，POST 请求需在参数或 Header 中携带。
+注意
+：
+ac_time_value
+不是 Cookie，不随 HTTP 请求发送。它存储在浏览器 LocalStorage 中，仅在 Cookie 续期流程中使用（详见 §8）。
+7.2 接口列表
+操作
+方法
+URL
+说明
+视频上传
+POST
+https://member.bilibili.com/preupload
++ 分片接口
+分片上传视频文件
+稿件提交
+POST
+https://member.bilibili.com/x/vu/web/add/v3
+提交标题/分区/标签/简介/封面，返回 bvid/aid/cid
+CC 字幕提交
+POST
+/x/v2/dm/web/subtitle/submit
+lan="zh-Hans"
+，上传中文字幕（非官方逆向接口，B 站改版可能失效）
+获取合集列表
+GET
+https://member.bilibili.com/x2/creative/web/seasons
+拉取账号下所有合集及小节
+添加视频到合集
+POST
+https://member.bilibili.com/x2/creative/web/season/section/episodes/add
+需要
+sectionId
++
+episodes[{aid, cid, title}]
+获取分区列表
+GET
+https://api.bilibili.com/x/web-interface/dynamic/region
+或静态分区表
+拉取可用的投稿分区（Worker 代理，分区列表较少变动可内置静态数据）
+Cookie 刷新
+POST
+B 站刷新接口
+通过
+ac_time_value
+获取新凭证
+免责声明
+：上述接口为非官方逆向接口，来自 bilibili-API-collect 社区项目。B 站随时可能改版导致接口失效，需以实际抓包验证为准。
+7.3 稿件提交参数
+JSON
+{
+"
+title
+"
+:
+"
+翻译后的中文标题
+"
+,
+"
+tid
+"
+:
+122
+,
+"
+tag
+"
+:
+"
+科技,翻译,YouTube
+"
+,
+"
+desc
+"
+:
+"
+原视频：https://youtube.com/watch?v=xxx
+\n
+频道：公司官方频道
+\n
+本视频由自动翻译系统处理
+"
+,
+"
+copyright
+"
+:
+1
+,
+"
+source
+"
+:
+"
+https://youtube.com/watch?v=xxx
+"
+,
+"
+cover
+"
+:
+"
+https://img.youtube.com/vi/xxx/maxresdefault.jpg
+"
+,
+"
+no_reprint
+"
+:
+0
+,
+"
+videos
+"
+:
+[
+{
+"
+filename
+"
+:
+"
+video.mp4
+"
+,
+"
+title
+"
+:
+"
+翻译后的中文标题
+"
+,
+"
+cid
+"
+:
+0
+}
+]
+}
+copyright
+：公司自有内容建议设为
+1
+（自制），转载内容设为
+2
+。该值可在频道配置中设置。
+videos
+：视频文件引用，
+cid
+在上传完成后由 B 站返回。
+7.4 CC 字幕提交参数
+JSON
+{
+"
+lan
+"
+:
+"
+zh-Hans
+"
+,
+"
+data
+"
+:
+{
+"
+body
+"
+:
+[
+{
+"
+from
+"
+:
+0.0
+,
+"
+to
+"
+:
+3.0
+,
+"
+content
+"
+:
+"
+第一句字幕
+"
+},
+{
+"
+from
+"
+:
+3.0
+,
+"
+to
+"
+:
+7.0
+,
+"
+content
+"
+:
+"
+第二句字幕
+"
+}
+]
+}
+}
+from
+/
+to
+为浮点秒数。语言代码
+zh-Hans
+表示简体中文（人工上传），区别于
+ai-zh
+（AI 自动生成）。
+7.5 合集追加参数
+JSON
+{
+"
+sectionId
+"
+:
+3954033
+,
+"
+episodes
+"
+:
+[
+{
+"
+title
+"
+:
+"
+视频标题
+"
+,
+"
+aid
+"
+:
+1906473802
+,
+"
+cid
+"
+:
+1625992822
+,
+"
+charging_pay
+"
+:
+0
+}
+]
+}
+URL 参数：
+csrf = bili_jct
+sectionId
+（camelCase）对应频道配置中的
+section_id
+（snake_case）。
+8. Cookie 自动续期机制
+8.1 原理
+B 站 Cookie 刷新依赖
+ac_time_value
+字段，这是一个特殊的刷新令牌，存储在浏览器 LocalStorage 中（非 Cookie）。当检测到 Cookie 即将过期时，系统自动请求新的会话凭证。
+获取方式
+：在 bilibili.com 登录状态下，按 F12 打开开发者工具 → Console → 输入
+window.localStorage.ac_time_value
+→ 回车复制返回值。
+8.2 刷新流程
+纯文本
+检测到 Cookie 即将过期
+↓
+check_refresh() → 判断是否需要刷新
+↓
+refresh() → 调用 B 站刷新接口
+├─ 1. 获取刷新 CSRF 令牌 (_get_refresh_csrf)
+├─ 2. 提交刷新请求
+└─ 3. 确认刷新操作 (_confirm_refresh)
+↓
+获取新凭证，覆盖旧的 SESSDATA / bili_jct / ac_time_value
+（buvid3 不参与刷新，保持不变）
+↓
+回写 KV（带多次重试，详见 §8.4）
+↓
+用新凭证继续执行投稿/字幕/合集操作
+关键风险
+：
+ac_time_value
+是一次性令牌，刷新成功后旧凭证立即失效。若回写 KV 失败，新凭证丢失、旧凭证已废，账号将被锁死。因此回写必须带重试和兜底机制（详见 §8.4）。
+8.3 集成到流水线
+纯文本
+每次流水线执行时：
+1. 从 KV 拉取 4 个凭证字段（SESSDATA / bili_jct / buvid3 / ac_time_value）
+2. 创建 Credential 对象（含 ac_time_value）
+3. 调用 check_refresh() 检查是否需要刷新
+4. 需要则 refresh() → 获取新凭证（含新的 SESSDATA / bili_jct / ac_time_value）
+5. 刷新成功 → 回写 KV（带重试，详见 §8.4）
+6. 用新凭证执行投稿/字幕/合集
+7. 失败则标红提示用户重新填 Cookie
+8.4 KV 回写失败处理（关键安全机制）
+由于
+ac_time_value
+刷新后旧凭证立即失效，回写 KV 必须有完善的兜底：
+Python
+def
+refresh_and_save
+(
+credential
+,
+worker_url
+,
+pipeline_token
+):
+"""
+刷新 Cookie 并安全回写 KV
+"""
+# 1. 执行刷新
+new_cred
+=
+credential
+.
+refresh
+()
+# 旧凭证在此步立即失效
+new_data
+=
+{
+"
+bili_sessdata
+"
+:
+new_cred
+.
+sessdata
+,
+"
+bili_jct
+"
+:
+new_cred
+.
+bili_jct
+,
+"
+ac_time_value
+"
+:
+new_cred
+.
+ac_time_value
+,
+}
+# 2. 回写 KV（指数退避重试，最多 5 次）
+for
+attempt
+in
+range
+(
+5
+):
+try
+:
+resp
+=
+requests
+.
+post
+(
+f
+"
+{
+worker_url
+}
+/api/pipeline/cookies"
+,
+headers
+={
+"
+Authorization
+"
+:
+f
+"Bearer
+{
+pipeline_token
+}
+"
+},
+json
+=
+new_data
+,
+timeout
+=(
+10
+,
+30
+),
+)
+resp
+.
+raise_for_status
+()
+return
+True
+# 回写成功
+except
+Exception
+as
+e
+:
+delay
+=
+3
+*
+(
+2
+**
+attempt
+)
+print
+(
+f
+"KV 回写失败(
+{
+attempt
++
+1
+}
+/5)，
+{
+delay
+}
+秒后重试:
+{
+e
+}
+"
+)
+time
+.
+sleep
+(
+delay
+)
+# 3. 全部重试失败 → 兜底：保存到 GitHub Actions Artifact
+print
+(
+"
+警告：KV 回写全部失败！新凭证保存到 Artifact 作为兜底
+"
+)
+with
+open
+(
+"
+new_cookies.json
+"
+,
+"
+w
+"
+)
+as
+f
+:
+json
+.
+dump
+(
+new_data
+,
+f
+)
+# Artifact 会在 workflow 中自动上传
+# 注意：Artifact 含敏感凭证，仓库必须设为 Private；公共仓库不建议使用此兜底
+# 同时发送通知（如配置了 notify_webhook）
+return
+False
+安全提示
+：
+new_cookies.json
+含 B 站登录凭证明文，GitHub Actions Artifact 在公共仓库中可被任何人下载。因此
+仓库必须设为 Private
+。若确需使用公共仓库，应改为加密存储（如使用
+gpg
+加密后存 Artifact，密钥通过 Secret 传入）或取消 Artifact 兜底改为仅通知用户手动处理。
+8.5 失效兜底
+场景
+处理
+check_refresh()
+返回 False 但 API 报
+-101
+标记失败，后台标红提示"Cookie 已失效"
+refresh()
+抛异常
+同上，记录错误原因
+KV 回写失败但凭证已刷新
+新凭证保存到 Artifact，后台标黄提示"需手动恢复 Cookie"
+正常刷新成功
+静默回写 KV，后台状态页无感知
+8.6 并发保护
+B 站 Cookie 刷新是不可逆操作，多个流水线同时运行会导致凭证冲突。通过 GitHub Actions 的
+concurrency
+机制确保互斥：
+YAML
+concurrency
+:
+group
+:
+pipeline-singleton
+cancel-in-progress
+:
+false
+这确保同一时刻只有一个 Workflow 运行，cron 和手动触发不会撞车。
+8.7 用户维护频率
+填一次 Cookie（4 个字段）后，系统自动续期，通常可维持数周至数月（视账号风控状态而定）。仅在以下情况需要重新填：
+B 站修改了登录/刷新机制
+账号在其他设备被踢下线
+超过刷新令牌自身的有效期
+KV 回写全部失败且 Artifact 也丢失
+9. GitHub Actions 流水线
+9.1 Workflow 触发定义
+YAML
+on
+:
+schedule
+:
+-
+cron
+:
+'
+0 */4 * * *
+'
+# 自动：每4小时
+repository_dispatch
+:
+types
+:
+[
+process
+]
+# 手动：Web后台触发
+workflow_dispatch
+:
+# 手动：GitHub页面触发
+concurrency
+:
+group
+:
+pipeline-singleton
+# 确保同一时刻只有一个流水线运行
+cancel-in-progress
+:
+false
+9.2 执行步骤
+YAML
+jobs
+:
+process
+:
+runs-on
+:
+ubuntu-latest
+timeout-minutes
+:
+300
+# 5小时超时（系统上限 360 分钟，留 1 小时余量）
+steps
+:
+-
+uses
+:
+actions/checkout@v4
+-
+uses
+:
+actions/setup-python@v5
+with
+:
+python-version
+:
+'
+3.12
+'
+-
+name
+:
+Install ffmpeg
+run
+:
+sudo apt-get update && sudo apt-get install -y ffmpeg
+-
+name
+:
+Cache Whisper model
+uses
+:
+actions/cache@v4
+with
+:
+path
+:
+~/.cache/whisper
+key
+:
+whisper-model-small
+restore-keys
+:
+whisper-model-
+-
+name
+:
+Install dependencies
+run
+:
+pip install -r requirements.txt
+-
+name
+:
+Run pipeline
+env
+:
+WORKER_URL
+:
+${{ secrets.WORKER_URL }}
+PIPELINE_TOKEN
+:
+${{ secrets.PIPELINE_TOKEN }}
+run
+:
+python scripts/main.py
+-
+name
+:
+Upload cookie artifact (if exists)
+if
+:
+always()
+uses
+:
+actions/upload-artifact@v4
+with
+:
+name
+:
+cookie-backup
+path
+:
+new_cookies.json
+if-no-files-found
+:
+ignore
+retention-days
+:
+7
+变更说明
+：
+显式安装 ffmpeg（yt-dlp 提取音频 + stable-ts 对齐依赖）
+使用
+actions/cache
+缓存 Whisper 模型（
+small
+约 461MB），避免每次 run 重新下载
+使用
+requirements.txt
+安装依赖并锁定版本（含 yt-dlp、bilibili-api-python、stable-ts 等）
+执行
+python scripts/main.py
+（非
+python main.py
+）
+始终上传 Artifact，用于 Cookie 刷新兜底恢复
+9.3 环境变量
+变量
+来源
+说明
+WORKER_URL
+GitHub Secrets
+Worker 域名
+PIPELINE_TOKEN
+GitHub Secrets
+Pipeline API 鉴权 Token（通过
+Authorization: Bearer
+Header 传输）
+其余配置（B 站 Cookie、ASR/翻译 API 等）均从 Worker KV 动态拉取，不进 GitHub Secrets。
+10. Cloudflare Worker API
+10.1 认证方式
+接口类型
+鉴权方式
+管理接口
+登录后签发 Session（HttpOnly Cookie），管理操作校验 Session
+Pipeline 接口
+Authorization: Bearer <pipeline_token>
+Header
+安全改进
+：Pipeline Token 不再通过 URL Query 传输（避免日志泄露）。管理接口不再每次传明文密码，改用 Session 机制。详见 §17。
+10.2 接口列表
+管理接口
+方法
+路径
+说明
+鉴权
+POST
+/api/login
+登录验证（返回 Session）
+无
+POST
+/api/config/init
+首次初始化（设置管理密码）
+无
+GET
+/api/config
+获取配置（脱敏）
+Admin
+PUT
+/api/config
+更新配置
+Admin
+GET
+/api/channels
+获取频道列表
+Admin
+POST
+/api/channels
+添加频道
+Admin
+PUT
+/api/channels/:id
+更新频道
+Admin
+DELETE
+/api/channels/:id
+删除频道
+Admin
+GET
+/api/seasons
+代理拉取 B 站合集列表
+Admin
+GET
+/api/tids
+代理拉取 B 站投稿分区列表
+Admin
+GET
+/api/youtube/search?q=
+代理搜索 YouTube 频道
+Admin
+GET
+/api/status
+获取运行状态
+Admin
+GET
+/api/processed
+获取已处理视频列表
+Admin
+DELETE
+/api/processed/:videoId
+删除单条已处理记录
+Admin
+GET
+/api/manual-queue
+获取手动视频队列
+Admin
+POST
+/api/manual-queue
+添加视频到手动队列
+Admin
+DELETE
+/api/manual-queue/:videoId
+从手动队列删除视频
+Admin
+POST
+/api/trigger
+触发 GitHub Actions（返回 dispatch 结果）
+Admin
+POST
+/api/test/bili
+测试 B 站 Cookie 有效性
+Admin
+POST
+/api/test/asr
+测试 ASR API 连通性
+Admin
+POST
+/api/test/translate
+测试翻译 API 连通性
+Admin
+POST
+/api/test/github
+测试 GitHub Token 权限
+Admin
+Pipeline 接口（供 GitHub Actions 调用）
+方法
+路径
+说明
+鉴权
+GET
+/api/pipeline/config
+拉取全部配置+频道+去重表+手动队列
+Bearer Token
+POST
+/api/pipeline/processed
+回写处理结果（批量），同时自动清理 manual_queue 中已处理项
+Bearer Token
+POST
+/api/pipeline/status
+回写运行状态
+Bearer Token
+POST
+/api/pipeline/cookies
+回写刷新后的 Cookie
+Bearer Token
+手动队列清理机制
+：Runner 在
+POST /api/pipeline/processed
+回写处理结果时，请求体中包含本批次处理的
+video_id
+列表及各自的处理结果。Worker 收到后按结果分类处理：
+处理成功
+：从
+manual_queue
+移除该 video_id（结果已落在
+processed
+表）
+处理失败且不可重试
+（如视频不存在、Cookie 过期）：从
+manual_queue
+移除，记录到
+processed
+的 failure 条目
+处理失败但可重试
+（如网络超时、ASR 限流）：保留在
+manual_queue
+中，
+status
+标记为
+retry
+，
+retry_count++
+，超过 3 次自动移除并记录失败
+Pipeline POST 请求体结构
+POST
+/api/pipeline/processed
+（回写处理结果 + 清理手动队列）：
+JSON
+{
+"
+results
+"
+:
+[
+{
+"
+video_id
+"
+:
+"
+dQw4w9WgXcQ
+"
+,
+"
+status
+"
+:
+"
+success
+"
+,
+"
+bvid
+"
+:
+"
+BV1xx411c7mD
+"
+,
+"
+title
+"
+:
+"
+视频标题
+"
+,
+"
+channel
+"
+:
+"
+频道名
+"
+,
+"
+stage
+"
+:
+"
+completed
+"
+,
+"
+retryable
+"
+:
+false
+},
+{
+"
+video_id
+"
+:
+"
+abc123
+"
+,
+"
+status
+"
+:
+"
+failed
+"
+,
+"
+bvid
+"
+:
+""
+,
+"
+title
+"
+:
+"
+视频标题
+"
+,
+"
+channel
+"
+:
+"
+频道名
+"
+,
+"
+stage
+"
+:
+"
+uploaded
+"
+,
+"
+message
+"
+:
+"
+Cookie 可能已过期
+"
+,
+"
+retryable
+"
+:
+false
+}
+]
+}
+retryable
+字段决定手动队列清理策略：
+true
+= 保留并标记 retry，
+false
+= 移除。
+POST
+/api/pipeline/status
+（回写运行状态）：
+JSON
+{
+"
+last_run
+"
+:
+"
+2026-07-06T12:00:00Z
+"
+,
+"
+total_processed
+"
+:
+42
+,
+"
+records
+"
+:
+[
+{
+"
+channel
+"
+:
+"
+公司官方频道
+"
+,
+"
+title
+"
+:
+"
+视频标题
+"
+,
+"
+status
+"
+:
+"
+success
+"
+,
+"
+stage
+"
+:
+"
+completed
+"
+,
+"
+time
+"
+:
+"
+2026-07-06T12:05:00Z
+"
+,
+"
+message
+"
+:
+""
+}
+]
+}
+POST
+/api/pipeline/cookies
+（回写刷新后的 Cookie）：
+JSON
+{
+"
+bili_sessdata
+"
+:
+"
+新SESSDATA
+"
+,
+"
+bili_jct
+"
+:
+"
+新bili_jct
+"
+,
+"
+bili_buvid3
+"
+:
+"
+新buvid3
+"
+,
+"
+ac_time_value
+"
+:
+"
+新ac_time_value
+"
+}
+10.3 Pipeline Config 响应结构
+JSON
+{
+"
+config
+"
+:
+{
+"
+bili_sessdata
+"
+:
+"
+xxx
+"
+,
+"
+bili_jct
+"
+:
+"
+xxx
+"
+,
+"
+bili_buvid3
+"
+:
+"
+xxx
+"
+,
+"
+ac_time_value
+"
+:
+"
+xxx
+"
+,
+"
+asr_api
+"
+:
+"
+https://...
+"
+,
+"
+asr_key
+"
+:
+"
+sk-xxx
+"
+,
+"
+translate_api
+"
+:
+"
+https://...
+"
+,
+"
+translate_key
+"
+:
+"
+sk-xxx
+"
+,
+"
+yt_cookies
+"
+:
+"
+Netscape格式Cookie内容(可选)
+"
+,
+"
+notify_webhook
+"
+:
+"
+https://...(可选)
+"
+},
+"
+channels
+"
+:
+[
+{
+"
+id
+"
+:
+"
+uuid
+"
+,
+"
+channel_id
+"
+:
+"
+UCxxxx
+"
+,
+"
+name
+"
+:
+"
+频道名
+"
+,
+"
+season_id
+"
+:
+3541247
+,
+"
+section_id
+"
+:
+3954033
+,
+"
+tid
+"
+:
+122
+,
+"
+tags
+"
+:
+"
+科技,翻译
+"
+,
+"
+copyright
+"
+:
+1
+,
+"
+subtitle_mode
+"
+:
+"
+translated
+"
+,
+"
+enabled
+"
+:
+true
+}
+],
+"
+manual_queue
+"
+:
+[
+{
+"
+video_id
+"
+:
+"
+dQw4w9WgXcQ
+"
+,
+"
+url
+"
+:
+"
+https://youtube.com/watch?v=dQw4w9WgXcQ
+"
+,
+"
+title
+"
+:
+"
+Never Gonna Give You Up
+"
+,
+"
+channel_config_id
+"
+:
+"
+a1b2c3d4-uuid-of-channel-config
+"
+,
+"
+config
+"
+:
+{
+"
+season_id
+"
+:
+3541247
+,
+"
+section_id
+"
+:
+3954033
+,
+"
+tid
+"
+:
+122
+,
+"
+tags
+"
+:
+"
+科技,翻译
+"
+,
+"
+copyright
+"
+:
+1
+,
+"
+subtitle_mode
+"
+:
+"
+translated
+"
+},
+"
+added_at
+"
+:
+"
+2026-07-06T12:00:00Z
+"
+,
+"
+status
+"
+:
+"
+pending
+"
+,
+"
+processing_since
+"
+:
+null
+,
+"
+retry_count
+"
+:
+0
+,
+"
+last_error
+"
+:
+null
+}
+],
+"
+processed
+"
+:
+{
+"
+videoId1
+"
+:
+{
+"
+bvid
+"
+:
+"
+BVxxx
+"
+,
+"
+title
+"
+:
+"
+标题
+"
+,
+"
+channel
+"
+:
+"
+频道名
+"
+,
+"
+status
+"
+:
+"
+success
+"
+,
+"
+stage
+"
+:
+"
+completed
+"
+,
+"
+processed_at
+"
+:
+1783344000
+},
+"
+videoId2
+"
+:
+{
+"
+bvid
+"
+:
+""
+,
+"
+title
+"
+:
+"
+标题
+"
+,
+"
+channel
+"
+:
+"
+频道名
+"
+,
+"
+status
+"
+:
+"
+failed
+"
+,
+"
+stage
+"
+:
+"
+uploaded
+"
+,
+"
+message
+"
+:
+"
+Cookie 可能已过期
+"
+,
+"
+processed_at
+"
+:
+1783343000
+}
+}
+}
+stage
+字段标识处理阶段：
+downloaded
+/
+asr
+/
+translated
+/
+uploaded
+/
+subtitled
+/
+seasoned
+/
+completed
+。失败时记录中断阶段，便于断点续传。
+processed_at
+为 Unix 时间戳，用于裁剪排序。
+admin_password
+、
+gh_token
+等管理类字段不下发给 Runner。
+manual_queue 状态生命周期
+：
+status
+含义
+流转
+pending
+待处理，等待下次流水线执行
+用户添加 →
+pending
+；
+retry
+下次执行时重置为
+pending
+processing
+流水线正在处理中
+pending
+→
+processing
+（Runner 拉取 config 时标记）
+done
+处理成功，已从队列移除
+processing
+→ 回写 processed 时自动移除（结果落在
+processed
+表）
+retry
+处理失败但可重试
+processing
+→
+retry
+（Runner 回写时标记
+retry_count++
+），超过 3 次自动移除并记录到
+processed
+failed
+处理失败且不可重试
+processing
+→
+failed
+（从队列移除，记录到
+processed
+的 failure 条目）
+生命周期总览：
+pending
+→
+processing
+→
+done
+/
+retry
+(→
+pending
+) /
+failed
+processing 卡死保护
+：
+processing
+状态附带
+processing_since
+时间戳。若 Runner 在流水线执行中崩溃（未回写结果），该项会卡在
+processing
+。Worker 在每次
+GET /api/pipeline/config
+请求时检查：若某项
+processing
+超过 1 小时（超过单次流水线最大运行时间），自动回退为
+pending
+，确保下次流水线能重新处理。
+10.4 Status 响应结构
+JSON
+{
+"
+last_run
+"
+:
+"
+2026-07-06T12:00:00Z
+"
+,
+"
+total_processed
+"
+:
+42
+,
+"
+records
+"
+:
+[
+{
+"
+channel
+"
+:
+"
+公司官方频道
+"
+,
+"
+title
+"
+:
+"
+视频标题
+"
+,
+"
+status
+"
+:
+"
+success
+"
+,
+"
+stage
+"
+:
+"
+completed
+"
+,
+"
+time
+"
+:
+"
+2026-07-06T12:05:00Z
+"
+,
+"
+message
+"
+:
+""
+}
+]
+}
+11. Cloudflare KV 存储设计
+11.1 KV 限制
+维度
+免费额度
+说明
+总存储
+1 GB
+足够使用
+单个 Value
+25 MB
+足够使用
+读操作
+100,000 次/天
+宽裕
+写操作
+1,000 次/天
+需优化写入策略
+Worker CPU 时间
+10ms/请求（免费层）
+后台代理拉取大列表时需注意
+11.2 Key 设计
+Key
+内容
+写入频率
+备注
+config
+全局配置 JSON（含 yt_cookies）
+低（用户修改时 + Cookie 刷新时）
+敏感字段加密存储，管理密码 bcrypt 哈希
+channels
+频道列表 JSON 数组
+低（用户增删时）
+manual_queue
+手动添加的视频队列 JSON 数组
+中（用户添加/处理完毕时）
+每项含 video_id、url、title、channel_config_id、config、added_at、status、retry_count、last_error
+processed
+已处理视频去重表 JSON
+中（每次执行批量回写1次）
+含裁剪逻辑，保留近500条
+status
+运行状态 JSON
+中（每次执行1次）
+最近100条运行记录
+统一说明
+：
+yt_cookies
+存储在
+config
+JSON 内（而非独立 Key），与
+bili_sessdata
+等字段同级。Pipeline Config 接口统一从
+config
+中返回。
+11.3 写入优化策略
+纯文本
+优化前（每视频1次写入）:
+5个视频 → 5次写processed + 1次写status = 6次写入/执行
+优化后（批量写入 + 裁剪）:
+5个视频 → Runner本地累积
+→ 1次批量写processed（含裁剪逻辑，保留近500条）
+→ 1次写status
+= 2次写入/执行
+Cookie 刷新回写（如有）: +1次写入/执行
+手动队列清理（如有手动视频处理完）: +1次写入/执行（manual_queue 是独立 KV Key，需单独写入清理结果）
+用户操作（改配置/增删频道/添加手动视频）: 按需，通常每天 <5 次
+按 cron 每 4 小时一次（一天 6 次），每天约
+14-24 次写入
+（含 Cookie 刷新、手动队列清理和用户操作），远低于 1,000 次/天限额。
+11.4 去重表裁剪逻辑
+YouTube RSS 默认返回最近约 15 条视频，去重表只需覆盖这个窗口。保留 500 条记录有充足余量：
+Python
+# 每次回写时裁剪
+if
+len
+(
+processed
+)
+>
+500
+:
+# 按时间排序，保留最近500条
+sorted_items
+=
+sorted
+(
+processed
+.
+items
+(),
+key
+=
+lambda
+x
+:
+x
+[
+1
+].
+get
+(
+'
+processed_at
+'
+)
+or
+0
+,
+reverse
+=
+True
+)
+processed
+=
+dict
+(
+sorted_items
+[:
+500
+])
+12. 约束与限制
+12.1 GitHub Actions
+约束
+值
+影响
+单 Job 执行上限
+6 小时（360 分钟）
+长视频需控制单次处理数量
+Workflow 超时
+300 分钟（配置值）
+留 1 小时余量给网络重试
+私有仓库免费额度
+2000 分钟/月
+约 33 小时计算时长（2000÷60≈33.3）
+cron 精度
+不保证准时
+可能延迟 5-15 分钟
+仓库活跃度
+长期不提交可能暂停调度
+定期提交保持活跃
+Runner 内存
+~7 GB RAM
+长音频需分段处理
+提示
+：若使用公共仓库，Actions 免费额度不受 2000 分钟限制，但配置含敏感信息需评估安全性。
+12.2 Cloudflare KV
+约束
+值
+应对
+写操作
+1,000 次/天
+批量回写，每次执行仅 2-3 次写入
+最终一致性
+写入后全球同步有延迟（最长数十秒）
+配置更新后等 30 秒再触发流水线；Runner 读 KV 时设
+cacheTtl=0
+Worker CPU
+10ms/请求（免费层）
+重逻辑下放到前端或 Runner
+12.3 YouTube
+约束
+说明
+RSS 延迟
+新视频发布后约 15-30 分钟才出现在 RSS
+RSS 范围
+仅返回最近约 15 条视频（超出窗口的视频可能丢失）
+Cookie 轮换
+浏览器标签页的 Cookie 频繁轮换，导出时建议用隐私窗口
+积压风险
+：若 cron 被跳过且频道在窗口期内发布超过 15 条视频，最旧的会跌出 RSS 窗口。建议定期检查，必要时用 YouTube Data API v3 的
+search
+（按发布时间排序）做补充回扫。
+12.4 B 站
+约束
+说明
+Cookie 有效期
+约 30 天，配合 ac_time_value 可自动续期
+非正式会员投稿限制
+单日最多 5 个稿件（建议使用正式会员账号）
+风控
+自动化操作可能触发风控，投稿间加随机延迟 5-15 秒
+合集审核
+创建合集需人工审核，必须先在 B 站创作者后台创建好合集与小节
+12.5 YouTube Data API v3
+约束
+值
+免费额度
+10,000 units/天
+搜索一次
+100 units
+频道详情查询
+1 unit
+可支持搜索次数/天
+约 100 次（假设全部配额用于搜索）
+13. 部署指南
+13.0 前置准备清单
+在开始部署前，请确认已准备好以下账号和服务：
+项目
+获取方式
+必需
+难度
+GitHub 账号
+github.com 注册
+是
+简单
+Cloudflare 账号
+cloudflare.com 注册
+是
+简单
+Google Cloud 账号
+console.cloud.google.com 注册
+否（不用搜索可不需要）
+中等
+B 站账号（正式会员）
+bilibili.com 注册
+是
+简单
+ASR 服务
+MiMo 语音识别 API（mimo.mi.com 注册 → 获取 API Key）
+是
+简单
+翻译服务
+用户自备（如 OpenAI GPT API、自部署 LLM 等）
+是
+视方案
+凭证获取详细教程：
+B 站 Cookie（4 个字段）：
+在浏览器登录 bilibili.com
+按 F12 打开开发者工具
+SESSDATA / bili_jct / buvid3：Application → Cookies → bilibili.com → 分别找到这三个字段
+ac_time_value：Console → 输入
+window.localStorage.ac_time_value
+→ 回车复制返回值
+YouTube API Key：
+访问 Google Cloud Console → 创建项目
+启用 YouTube Data API v3
+凭证 → 创建凭据 → API 密钥
+MiMo ASR API Key：
+访问 mimo.mi.com → 注册/登录
+控制台 → API Key 管理 → 创建 API Key
+复制 API Key（用于
+asr_key
+配置项）
+翻译服务 API Key：
+根据所选翻译服务（如 OpenAI、自部署 LLM 等）获取 API Key
+填入后台
+translate_api
+和
+translate_key
+YouTube Cookie（Netscape 格式）：
+安装浏览器扩展 "Get cookies.txt"（Chrome/Firefox 均有）
+在已登录 YouTube 的浏览器标签页中点击扩展
+导出 cookies.txt 文件，将内容粘贴到后台
+GitHub Fine-grained PAT：
+GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens
+创建新 Token，选择目标仓库
+权限：Actions: Read and write, Metadata: Read-only
+生成后复制 Token
+13.1 部署流程（只需做一次）
+纯文本
+步骤 0：前置准备
+├─ 注册 GitHub / Cloudflare / Google Cloud 账号
+├─ 准备 ASR 服务和翻译服务
+├─ 安装本地开发工具（可选，用于步骤 3 的 secret 配置）：
+│    ├─ Node.js 18+（含 npm）
+│    ├─ npm install -g wrangler  # 安装 Cloudflare CLI
+│    └─ wrangler login            # 登录 Cloudflare 账号
+└─ 在 B 站创作者后台手动创建所需合集与小节（需人工审核通过）
+步骤 1：准备 GitHub 仓库
+├─ Fork 或克隆项目模板到自己的 GitHub 私有仓库
+├─ 本地克隆：git clone https://github.com/yourname/yt2bili.git
+└─ （Secrets 稍后在步骤 6 回填）
+步骤 2：创建 Cloudflare KV
+├─ 登录 Cloudflare Dashboard
+├─ Workers & Pages → KV → 创建命名空间
+└─ 复制命名空间 ID
+步骤 3：配置 wrangler.toml + 加密密钥
+├─ 找到项目根目录的 wrangler.toml
+├─ 将 KV 命名空间 ID 填入 kv_namespaces.id 字段
+├─ 执行 wrangler secret put ENCRYPTION_KEY，输入 32 字节随机字符串
+└─ push 到主分支
+步骤 4：连接 Git 仓库
+├─ Cloudflare Dashboard → Workers → 连接 GitHub 仓库
+├─ 选择私有仓库 → 授权
+└─ 主分支推送后自动部署，获得 Worker 域名
+步骤 5：初始化 Web 后台
+├─ 访问 Worker 域名
+├─ 设置管理密码（首次初始化）
+└─ 在"系统设置"中查看自动生成的 pipeline_token，复制保存
+步骤 6：回填 GitHub Secrets
+├─ GitHub 仓库 → Settings → Secrets and variables → Actions
+├─ WORKER_URL = Worker 域名（如 https://yt2bili.xxx.workers.dev）
+└─ PIPELINE_TOKEN = 步骤 5 中复制的 pipeline_token
+步骤 7：填写配置
+├─ 后台填写 B 站 Cookie（4 个字段，ac_time_value 从 Console 获取）
+├─ 后台填写 ASR API + 翻译 API
+├─ 后台填写 GitHub Token + 仓库
+├─ 后台添加 YouTube 频道（搜索或手动）
+└─ 每项填完后点"测试"按钮验证连通性
+步骤 8：验证部署
+├─ 后台点"立即执行"
+├─ 等 5-10 分钟
+└─ 刷新状态页，确认出现处理记录
+Cloudflare 免费计划
+：Workers 免费层（10 万请求/天）和 KV 免费层完全够用。预计日均请求 <100 次。
+13.2 本地开发
+bash
+# 安装依赖
+npm
+install
+# 本地运行 Worker
+npm
+run
+dev
+# 手动部署（也可通过 Git 自动部署）
+npm
+run
+deploy
+14. 日常运维
+14.1 常见操作指南
+日常操作
+场景
+操作
+Cookie 过期
+后台状态页标红 → 重新填入新 Cookie（4 个字段）
+添加新频道
+后台搜索 → 关注 → 选合集 → 选分区 → 填标签 → 保存
+停止某频道
+后台频道管理 → 关闭"启用"开关
+查看处理记录
+后台状态页自动展示
+手动触发
+后台点"立即执行" → 弹窗提示已触发 → 稍后刷新查看
+重新处理某视频
+后台已处理列表 → 删除该条 → 下次执行重新处理
+更改 cron 频率
+编辑
+.github/workflows/process.yml
+中 cron 表达式 → 提交代码
+更改单次处理上限
+编辑
+scripts/main.py
+中
+MAX_VIDEOS_PER_RUN
+→ 提交代码
+更换 ASR/翻译服务
+后台修改 API 地址和密钥 → 点"测试"验证
+新建合集
+在 B 站创作者后台创建 → 等待审核 → 后台频道管理中重新选合集
+异常处理
+场景
+操作
+下载失败
+可能 yt-dlp 版本过旧，在 workflow 中改为
+pip install -U yt-dlp
+投稿失败 -101
+Cookie 已过期，重新填入
+投稿失败 -509
+触发风控，降低 cron 频率或增加投稿间隔
+字幕未挂上
+检查 ASR/翻译 API 是否正常，查看 Actions 日志
+状态页无运行记录
+检查 GitHub Actions（仓库 → Actions 标签 → 查看运行历史）
+"立即执行"无响应
+检查 GitHub Token 是否过期、仓库是否正确
+Worker 不可访问
+检查 Cloudflare Dashboard 中 Worker 状态
+管理密码忘记
+使用 wrangler 命令行重置（详见 §5.3）
+14.2 Cookie 失效检测
+流水线投稿时若 B 站 API 返回鉴权错误（如
+-101 账号未登录
+）：
+该视频标记为失败，原因记录"Cookie 可能已过期"
+后台状态页该条记录标红显示
+若配置了通知 Webhook，自动发送告警
+用户看到后重新填入 Cookie 即可恢复
+14.3 监控要点
+监控项
+查看位置
+异常处理
+流水线是否按时执行
+后台状态页 → 上次运行时间
+如超 8 小时未运行，检查 GitHub Actions（仓库 → Actions 标签 → 查看是否有失败）
+投稿是否成功
+后台状态页 → 处理记录
+红色记录查看失败原因和中断阶段
+Cookie 是否有效
+后台状态页 → 标红提示
+重新填入 Cookie
+KV 写入是否超限
+Cloudflare Dashboard → KV
+如超限，降低 cron 频率
+GitHub Actions 额度
+GitHub → Settings → Billing
+私有仓库 2000 分钟/月
+14.4 yt-dlp 时效性维护
+YouTube 频繁更新会导致 yt-dlp 失效。
+pip install yt-dlp
+装的是固定版本，失效后需更新：
+症状：下载报错
+Unable to extract
+处理：在 workflow 中改为
+pip install -U yt-dlp
+或定期手动 bump 版本
+15. 项目目录结构
+纯文本
+yt2bili/
+├── src/
+│   └── index.ts              # Cloudflare Worker 入口（Hono 框架）
+├── public/
+│   └── index.html            # Web 管理后台（单文件前端）
+├── scripts/
+│   ├── main.py               # 流水线主入口
+│   ├── youtube.py            # YouTube RSS 轮询 + yt-dlp 下载
+│   ├── asr.py                # MiMo ASR 调用 + stable-ts 强制对齐
+│   ├── translate.py          # 翻译 API 调用（根据 subtitle_mode 决定是否执行）
+│   ├── bilibili.py           # B 站投稿 + 字幕 + 合集
+│   ├── cookie_refresh.py     # Cookie 自动续期
+│   └── srt_utils.py          # SRT 字幕处理工具（parse_srt, entries_to_srt 等）
+├── .github/
+│   └── workflows/
+│       └── process.yml       # GitHub Actions 工作流
+├── wrangler.toml             # Cloudflare Workers 配置
+├── package.json              # Node.js 依赖
+├── tsconfig.json             # TypeScript 配置
+├── requirements.txt          # Python 依赖锁定
+├── .gitignore
+└── README.md                 # 本文档
+16. ASR 与翻译 HTTPS 调用详解
+本章详细说明流水线中语音识别（ASR）和 LLM 翻译两个环节如何通过 HTTPS API 完成，包括请求格式、响应处理、错误重试等。B 站 API 接口详见 §7。
+16.1 整体数据流
+纯文本
+yt-dlp 下载视频 (mp4) → ffmpeg 提取音频 (mp3)
+↓
+MiMo ASR API → 返回纯文本转录（无时间戳）
+↓
+stable-ts 强制对齐 → 将文本对齐到音频 → 词级时间戳（±0.2s 精度）
+↓
+stable-ts 句子级分段 → 输出 SRT
+↓
+（可选）翻译 API → 返回中文字幕（仅文本，时间戳保留原始值）+ 中文标题
+↓
+组装为 B 站字幕提交格式 (body 数组)
+时间戳方案
+：MiMo
+mimo-v2.5-asr
+返回纯文本不含时间戳。系统使用
+stable-ts
+的
+align()
+函数将文本强制对齐到音频，生成词级时间戳（精度 ±0.2 秒），再按句子分组输出 SRT。相比 ffmpeg 静音分段，精度提升一个数量级。
+16.2 ASR（语音识别）调用
+本系统采用
+两阶段方案
+：先用 MiMo ASR 获取高精度转录文本，再用 stable-ts 强制对齐生成精确时间戳。
+纯文本
+阶段 1：转录（MiMo ASR）
+音频 → MiMo API → 纯文本（无时间戳）
+阶段 2：对齐（stable-ts）
+纯文本 + 音频 → stable-ts align() → 词级时间戳（±0.2s）
+→ 按句子分组 → 输出 SRT
+16.2.1 阶段 1：MiMo ASR 转录
+MiMo ASR 采用 OpenAI Chat Completions 兼容格式，音频以 Base64 编码传入：
+纯文本
+POST https://api.xiaomimimo.com/v1/chat/completions
+api-key: {asr_key}
+Content-Type: application/json
+参数
+值
+说明
+model
+mimo-v2.5-asr
+当前唯一支持的 ASR 模型
+音频格式
+wav、mp3
+需 Base64 编码后传入
+Base64 大小上限
+10 MB
+超过需分段切分（见 §16.2.4）
+语言参数
+asr_options.language
+支持
+auto
+/
+zh
+/
+en
+，未配置时自动检测
+认证方式
+api-key
+Header
+非 Bearer Token
+调用代码：
+Python
+import
+base64
+import
+os
+import
+requests
+def
+call_mimo_asr
+(
+audio_path
+,
+asr_api
+,
+asr_key
+,
+language
+=
+"
+auto
+"
+):
+"""
+调用 MiMo ASR API，返回纯文本转录结果。
+音频文件需 wav 或 mp3 格式，Base64 编码后不超过 10MB。
+"""
+with
+open
+(
+audio_path
+,
+"
+rb
+"
+)
+as
+f
+:
+audio_bytes
+=
+f
+.
+read
+()
+audio_b64
+=
+base64
+.
+b64encode
+(
+audio_bytes
+).
+decode
+(
+"
+utf-8
+"
+)
+if
+len
+(
+audio_b64
+)
+>
+10
+*
+1024
+*
+1024
+:
+raise
+ValueError
+(
+f
+"音频 Base64 编码后超过 10MB 限制:
+{
+len
+(
+audio_b64
+)
+}
+bytes"
+)
+# 根据文件扩展名动态选择 MIME 类型
+ext
+=
+os
+.
+path
+.
+splitext
+(
+audio_path
+)[
+1
+].
+lower
+()
+mime_map
+=
+{
+"
+.mp3
+"
+:
+"
+audio/mpeg
+"
+,
+"
+.wav
+"
+:
+"
+audio/wav
+"
+,
+"
+.m4a
+"
+:
+"
+audio/mp4
+"
+}
+mime_type
+=
+mime_map
+.
+get
+(
+ext
+,
+"
+audio/mpeg
+"
+)
+resp
+=
+requests
+.
+post
+(
+asr_api
+,
+headers
+={
+"
+api-key
+"
+:
+asr_key
+,
+# MiMo 使用 api-key Header
+"
+Content-Type
+"
+:
+"
+application/json
+"
+,
+},
+json
+={
+"
+model
+"
+:
+"
+mimo-v2.5-asr
+"
+,
+"
+messages
+"
+:
+[
+{
+"
+role
+"
+:
+"
+user
+"
+,
+"
+content
+"
+:
+[
+{
+"
+type
+"
+:
+"
+input_audio
+"
+,
+"
+input_audio
+"
+:
+{
+"
+data
+"
+:
+f
+"data:
+{
+mime_type
+}
+;base64,
+{
+audio_b64
+}
+"
+}
+}
+]
+}
+],
+"
+asr_options
+"
+:
+{
+"
+language
+"
+:
+language
+# "auto" / "zh" / "en"
+}
+},
+timeout
+=(
+10
+,
+600
+),
+# (connect 10s, read 600s)
+)
+resp
+.
+raise_for_status
+()
+data
+=
+resp
+.
+json
+()
+return
+data
+[
+"
+choices
+"
+][
+0
+][
+"
+message
+"
+][
+"
+content
+"
+].
+strip
+()
+MiMo ASR 响应格式（OpenAI Chat Completions 兼容）：
+JSON
+{
+"
+id
+"
+:
+"
+chatcmpl-xxx
+"
+,
+"
+choices
+"
+:
+[
+{
+"
+index
+"
+:
+0
+,
+"
+message
+"
+:
+{
+"
+role
+"
+:
+"
+assistant
+"
+,
+"
+content
+"
+:
+"
+Hello everyone, welcome to this video. Today we are going to talk about...
+"
+},
+"
+finish_reason
+"
+:
+"
+stop
+"
+}
+],
+"
+usage
+"
+:
+{
+"
+prompt_tokens
+"
+:
+0
+,
+"
+completion_tokens
+"
+:
+100
+,
+"
+total_tokens
+"
+:
+100
+}
+}
+choices[0].message.content
+为纯文本转录结果，
+不含时间戳
+。时间戳由阶段 2 的 stable-ts 对齐生成。
+16.2.2 阶段 2：stable-ts 强制对齐生成时间戳
+为什么需要强制对齐？
+MiMo ASR 返回纯文本，没有时间戳。直接用会产生没有时间轴的字幕，无法用于 CC 字幕。
+stable-ts
+的
+align()
+函数可以接收已有文本，将其对齐到音频上，生成
+词级时间戳
+（精度 ±0.2 秒），再按句子分组输出 SRT。
+相比 ffmpeg 静音分段方案（每段一个粗略时间戳），stable-ts 对齐方案的优势：
+维度
+ffmpeg 静音分段（旧方案）
+stable-ts 强制对齐（新方案）
+时间戳精度
+段级（数秒~数十秒）
+词级（±0.2 秒）
+字幕粒度
+每段一句话或多句
+每句一条字幕，可细化到词
+依赖网络
+需逐段调用 ASR（段数=API 调用数）
+只调 1 次 ASR + 本地对齐
+长音频处理
+需手动分段 + 合并时间戳
+需手动分段（10MB 限制），stable-ts 自动对齐文本边界
+10MB 限制
+每段需单独控制
+同样需切分（见 §16.2.4），但每段对齐更精确
+安装：
+bash
+pip
+install
+stable-ts
+对齐代码：
+Python
+import
+stable_whisper
+# 全局模型实例，避免重复加载（模型约 461MB，加载需 5-10 秒）
+_align_model
+=
+None
+def
+get_align_model
+(
+model_size
+=
+"
+small
+"
+):
+"""
+获取或初始化对齐模型（单例模式，整个流水线只加载一次）
+"""
+global
+_align_model
+if
+_align_model
+is
+None
+:
+_align_model
+=
+stable_whisper
+.
+load_model
+(
+model_size
+)
+return
+_align_model
+def
+align_text_to_audio
+(
+audio_path
+,
+transcript_text
+,
+language
+=
+"
+en
+"
+,
+model
+=
+None
+):
+"""
+使用 stable-ts 将已有文本对齐到音频，生成带时间戳的字幕。
+参数:
+audio_path: 音频文件路径（mp3/wav）
+transcript_text: MiMo ASR 返回的纯文本
+language: 音频语言（"en"/"zh" 等，用于选择对齐模型）
+model: 已加载的 stable-ts 模型实例（可选，不传则自动加载）
+返回: stable-ts Result 对象（含词级时间戳）
+"""
+# 使用传入的模型或自动加载（推荐在流水线入口处加载一次后传入）
+if
+model
+is
+None
+:
+model
+=
+get_align_model
+(
+"
+small
+"
+)
+# 强制对齐：将文本对齐到音频
+result
+=
+model
+.
+align
+(
+audio_path
+,
+transcript_text
+,
+language
+=
+language
+)
+# 按句子分组：用 max_chars 控制每条字幕长度（非 max_words，因中文分词不依赖空格）
+if
+language
+==
+"
+zh
+"
+:
+result
+.
+split_by_length
+(
+max_chars
+=
+30
+)
+# 中文每条最多 30 字符
+else
+:
+result
+.
+split_by_length
+(
+max_chars
+=
+80
+)
+# 英文每条最多 80 字符
+# 限制每条字幕最长时长，合并过短段
+result
+.
+clamp_max
+(
+max_dur
+=
+8.0
+)
+# 任何段落不超过 8 秒
+return
+result
+注意
+：stable-ts 的
+split_by_length()
+接受
+max_chars
+/
+max_words
+参数（非
+min_dur
+/
+max_dur
+）。时长控制通过
+clamp_max(max_dur=...)
+实现。详见
+stable-ts 文档
+。
+仓库状态
+：stable-ts GitHub 仓库已归档（Public archive），不再活跃维护。但功能稳定、社区广泛使用。如未来出现问题，可评估迁移到 WhisperX 或 faster-whisper 的
+transcribe()
+带时间戳模式。
+输出 SRT：
+Python
+def
+transcribe_and_align
+(
+audio_path
+,
+asr_api
+,
+asr_key
+,
+language
+=
+"
+auto
+"
+):
+"""
+完整流程：MiMo ASR 转录 → stable-ts 对齐 → 输出 SRT
+"""
+# 阶段 1：MiMo ASR 转录（获取纯文本）
+transcript
+=
+call_mimo_asr
+(
+audio_path
+,
+asr_api
+,
+asr_key
+,
+language
+)
+# 映射语言代码：MiMo 用 "auto"/"zh"/"en"，stable-ts 需明确语言
+# "auto" 默认按英文对齐（Whisper 模型对英文支持最好）；如已知其他语言应显式传入
+align_lang
+=
+"
+zh
+"
+if
+language
+==
+"
+zh
+"
+else
+language
+if
+language
+!=
+"
+auto
+"
+else
+"
+en
+"
+# 阶段 2：stable-ts 强制对齐（生成时间戳）
+model
+=
+get_align_model
+(
+"
+small
+"
+)
+result
+=
+align_text_to_audio
+(
+audio_path
+,
+transcript
+,
+align_lang
+,
+model
+=
+model
+)
+# 输出 SRT 文本
+srt_content
+=
+result
+.
+to_srt_vtt
+(
+word_level
+=
+False
+)
+# 句子级 SRT
+return
+srt_content
+工作原理
+：stable-ts 加载 Whisper 模型后，不执行完整转录，而是利用模型的交叉注意力权重（cross-attention weights），通过动态时间规整（DTW）将已有文本的每个词对齐到音频中的精确时间点。这比完整转录快得多，且时间戳精度更高。
+16.2.3 对齐参数调优
+stable-ts 提供多种字幕分段策略，可根据需要调整：
+参数
+默认值
+说明
+max_chars
+中文 30 / 英文 80
+每条字幕最多字符数，控制字幕长度
+clamp_max(max_dur)
+8.0 秒
+限制每条字幕最长时长（超过则拆分）
+模型大小
+small
+tiny
+/
+base
+/
+small
+/
+medium
+/
+large
+，越大越精确但越慢
+中文特殊处理
+：中文不按空格分词，stable-ts 按 token/字符对齐。使用
+max_chars
+（而非
+max_words
+）控制中文字幕长度更精确：
+Python
+if
+align_lang
+==
+"
+zh
+"
+:
+result
+.
+split_by_length
+(
+max_chars
+=
+30
+)
+else
+:
+result
+.
+split_by_length
+(
+max_chars
+=
+80
+)
+result
+.
+clamp_max
+(
+max_dur
+=
+8.0
+)
+CPU 推理注意
+：GitHub Actions 无 GPU，
+small
+模型在 CPU 上对齐 1 小时音频约需 5-15 分钟（非 GPU 的 2-5 分钟）。如需更快可换
+base
+/
+tiny
+，但精度会下降。
+16.2.4 长音频与 10MB 限制处理
+MiMo ASR 的 Base64 编码后大小上限为 10MB（约 7MB 原始 mp3）。对于超长音频，需先切分再分别转录和对齐：
+场景
+处理策略
+原始音频 < 7MB
+直接调用，无需切分
+原始音频 > 7MB
+ffmpeg 按固定时长切分，分别转录+对齐，合并 SRT
+stable-ts 对齐超时
+换用更小模型（
+base
+/
+tiny
+），或分段对齐
+Python
+import
+subprocess
+def
+split_audio_if_needed
+(
+audio_path
+,
+max_size_mb
+=
+7
+):
+"""
+如果音频文件超过 max_size_mb，按固定时长切分。
+返回: [(path, start_offset), ...] 切分后的片段及时间偏移
+"""
+import
+os
+file_size
+=
+os
+.
+path
+.
+getsize
+(
+audio_path
+)
+if
+file_size
+<=
+max_size_mb
+*
+1024
+*
+1024
+:
+return
+[(
+audio_path
+,
+0.0
+)]
+# 无需切分
+# 获取总时长
+cmd
+=
+[
+"
+ffprobe
+"
+,
+"
+-v
+"
+,
+"
+quiet
+"
+,
+"
+-show_entries
+"
+,
+"
+format=duration
+"
+,
+"
+-of
+"
+,
+"
+default=noprint_wrappers=1:nokey=1
+"
+,
+audio_path
+]
+duration
+=
+float
+(
+subprocess
+.
+run
+(
+cmd
+,
+capture_output
+=
+True
+,
+text
+=
+True
+).
+stdout
+.
+strip
+())
+# 按目标大小估算每段时长
+seg_duration
+=
+(
+max_size_mb
+*
+1024
+*
+1024
+/
+file_size
+)
+*
+duration
+*
+0.9
+# 留 10% 余量
+n_segments
+=
+int
+(
+duration
+//
+seg_duration
+)
++
+1
+segments
+=
+[]
+for
+i
+in
+range
+(
+n_segments
+):
+start
+=
+i
+*
+seg_duration
+seg_path
+=
+f
+"audio_part_
+{
+i
+:03d
+}
+.mp3"
+# 使用 -accurate_seek + 重新编码（非 -acodec copy），确保切分时间戳精确
+# -acodec copy 在关键帧边界切分，会导致实际起始时间偏移
+cmd
+=
+[
+"
+ffmpeg
+"
+,
+"
+-i
+"
+,
+audio_path
+,
+"
+-ss
+"
+,
+str
+(
+start
+),
+"
+-t
+"
+,
+str
+(
+seg_duration
+),
+"
+-accurate_seek
+"
+,
+"
+-acodec
+"
+,
+"
+libmp3lame
+"
+,
+"
+-q:a
+"
+,
+"
+4
+"
+,
+seg_path
+]
+subprocess
+.
+run
+(
+cmd
+,
+capture_output
+=
+True
+,
+timeout
+=
+120
+)
+segments
+.
+append
+((
+seg_path
+,
+start
+))
+return
+segments
+def
+transcribe_long_audio
+(
+audio_path
+,
+asr_api
+,
+asr_key
+,
+language
+=
+"
+auto
+"
+):
+"""
+长音频处理：切分 → 逐段转录+对齐 → 合并 SRT
+模型在循环外加载一次，避免每段重复加载（~461MB 模型加载需 5-10 秒）
+"""
+segments
+=
+split_audio_if_needed
+(
+audio_path
+)
+all_srt_entries
+=
+[]
+# 预加载对齐模型（整个函数只加载一次）
+align_lang
+=
+"
+zh
+"
+if
+language
+==
+"
+zh
+"
+else
+language
+if
+language
+!=
+"
+auto
+"
+else
+"
+en
+"
+model
+=
+get_align_model
+(
+"
+small
+"
+)
+for
+seg_path
+,
+offset
+in
+segments
+:
+# 阶段 1：MiMo ASR 转录
+transcript
+=
+call_mimo_asr
+(
+seg_path
+,
+asr_api
+,
+asr_key
+,
+language
+)
+# 阶段 2：stable-ts 对齐（传入已加载的模型）
+result
+=
+align_text_to_audio
+(
+seg_path
+,
+transcript
+,
+align_lang
+,
+model
+=
+model
+)
+# 提取条目并加上时间偏移
+for
+seg
+in
+result
+.
+segments
+:
+all_srt_entries
+.
+append
+({
+"
+start_seconds
+"
+:
+seg
+.
+start
++
+offset
+,
+"
+end_seconds
+"
+:
+seg
+.
+end
++
+offset
+,
+"
+text
+"
+:
+seg
+.
+text
+,
+})
+# 重新编号并输出 SRT
+lines
+=
+[]
+for
+i
+,
+entry
+in
+enumerate
+(
+all_srt_entries
+,
+1
+):
+start_str
+=
+format_timestamp
+(
+entry
+[
+"
+start_seconds
+"
+])
+end_str
+=
+format_timestamp
+(
+entry
+[
+"
+end_seconds
+"
+])
+lines
+.
+append
+(
+f
+"
+{
+i
+}\n{
+start_str
+}
+-->
+{
+end_str
+}\n{
+entry
+[
+'
+text
+'
+]
+}\n
+"
+)
+return
+"
+\n
+"
+.
+join
+(
+lines
+)
+16.2.5 SRT 工具函数
+以下函数定义在
+scripts/srt_utils.py
+中，供
+asr.py
+、
+translate.py
+、
+bilibili.py
+共同调用：
+Python
+def
+format_timestamp
+(
+seconds
+):
+"""
+秒数转 SRT 时间格式 HH:MM:SS,mmm（修复浮点进位 bug）
+"""
+if
+seconds
+is
+None
+or
+seconds
+<
+0
+:
+raise
+ValueError
+(
+f
+"无效的时间戳:
+{
+seconds
+}
+"
+)
+# 统一转为毫秒整数，避免 round((seconds - int(seconds)) * 1000) 在 0.9999 时进位丢失
+total_ms
+=
+round
+(
+seconds
+*
+1000
+)
+hrs
+=
+total_ms
+//
+3_600_000
+mins
+=
+(
+total_ms
+%
+3_600_000
+)
+//
+60_000
+secs
+=
+(
+total_ms
+%
+60_000
+)
+//
+1_000
+ms
+=
+total_ms
+%
+1_000
+return
+f
+"
+{
+hrs
+:02d
+}
+:
+{
+mins
+:02d
+}
+:
+{
+secs
+:02d
+}
+,
+{
+ms
+:03d
+}
+"
+def
+parse_srt
+(
+srt_content
+):
+"""
+解析 SRT 为条目列表 [{index, start, end, start_seconds, end_seconds, text}, ...]
+"""
+entries
+=
+[]
+blocks
+=
+srt_content
+.
+strip
+().
+split
+(
+"
+\n\n
+"
+)
+for
+block
+in
+blocks
+:
+lines
+=
+block
+.
+strip
+().
+split
+(
+"
+\n
+"
+)
+if
+len
+(
+lines
+)
+<
+3
+:
+continue
+index
+=
+int
+(
+lines
+[
+0
+])
+time_line
+=
+lines
+[
+1
+]
+start_str
+,
+end_str
+=
+time_line
+.
+split
+(
+"
+-->
+"
+)
+text
+=
+"
+\n
+"
+.
+join
+(
+lines
+[
+2
+:])
+entries
+.
+append
+({
+"
+index
+"
+:
+index
+,
+"
+start
+"
+:
+start_str
+,
+"
+end
+"
+:
+end_str
+,
+"
+start_seconds
+"
+:
+parse_time_to_seconds
+(
+start_str
+),
+"
+end_seconds
+"
+:
+parse_time_to_seconds
+(
+end_str
+),
+"
+text
+"
+:
+text
+,
+})
+return
+entries
+def
+entries_to_srt
+(
+entries
+):
+"""
+将条目列表转回 SRT 格式
+"""
+lines
+=
+[]
+for
+i
+,
+entry
+in
+enumerate
+(
+entries
+,
+1
+):
+lines
+.
+append
+(
+f
+"
+{
+i
+}\n{
+entry
+[
+'
+start
+'
+]
+}
+-->
+{
+entry
+[
+'
+end
+'
+]
+}\n{
+entry
+[
+'
+text
+'
+]
+}\n
+"
+)
+return
+"
+\n
+"
+.
+join
+(
+lines
+)
+def
+parse_time_to_seconds
+(
+time_str
+):
+"""
+SRT 时间格式 HH:MM:SS,mmm 转秒数
+"""
+h
+,
+m
+,
+s
+=
+time_str
+.
+replace
+(
+"
+,
+"
+,
+"
+.
+"
+).
+split
+(
+"
+:
+"
+)
+return
+int
+(
+h
+)
+*
+3600
++
+int
+(
+m
+)
+*
+60
++
+float
+(
+s
+)
+16.3 LLM 翻译调用
+前置条件
+：本章翻译流程仅在频道配置的
+subtitle_mode
+为
+translated
+或
+both
+时执行。当
+subtitle_mode
+为
+original
+或
+none
+时，Runner 跳过翻译步骤，直接使用 ASR 原始文本作为字幕（
+original
+）或不生成字幕（
+none
+），标题使用 YouTube 原始标题。判断逻辑详见 §4.1 步骤 ③ 和 ⑤。
+16.3.1 调用方式
+纯文本
+POST {translate_api}
+Authorization: Bearer {translate_key}
+Content-Type: application/json
+16.3.2 请求
+翻译分两部分：字幕翻译和标题翻译。建议合并为一次请求，减少 API 调用次数：
+Python
+import
+requests
+import
+json
+def
+call_translate
+(
+srt_content
+,
+original_title
+,
+translate_api
+,
+translate_key
+,
+source_language
+=
+"
+auto
+"
+,
+context
+=
+""
+):
+resp
+=
+requests
+.
+post
+(
+translate_api
+,
+headers
+={
+"
+Authorization
+"
+:
+f
+"Bearer
+{
+translate_key
+}
+"
+,
+"
+Content-Type
+"
+:
+"
+application/json
+"
+,
+},
+json
+={
+"
+model
+"
+:
+"
+your-model-name
+"
+,
+# 模型名（可选）
+"
+source_language
+"
+:
+source_language
+,
+# 源语言（"auto"/"en"/"ja"/"ko" 等，由 ASR language 决定）
+"
+target_language
+"
+:
+"
+zh-Hans
+"
+,
+"
+title
+"
+:
+original_title
+,
+# 需要翻译的标题
+"
+subtitle
+"
+:
+srt_content
+,
+# SRT 格式字幕全文
+"
+context
+"
+:
+context
+,
+# 上一批末尾的上下文（可选）
+"
+instructions
+"
+:
+"
+请将字幕和标题翻译为简体中文。仅翻译文本内容，不要修改时间戳、编号或格式。保持语气自然流畅，专业术语使用中文通用译法。
+"
+,
+},
+timeout
+=(
+10
+,
+300
+),
+# (connect超时10s, read超时300s)
+)
+resp
+.
+raise_for_status
+()
+return
+resp
+.
+json
+()
+16.3.3 响应格式
+JSON
+{
+"
+translated_title
+"
+:
+"
+大家好，欢迎观看这个视频
+"
+,
+"
+translated_subtitle
+"
+:
+"
+1
+\n
+00:00:01,860 --> 00:00:04,459
+\n
+大家好，欢迎观看这个视频。
+\n\n
+2
+\n
+00:00:04,460 --> 00:00:08,250
+\n
+今天我们要讨论的是...
+\n\n
+...
+"
+,
+"
+usage
+"
+:
+{
+"
+prompt_tokens
+"
+:
+5000
+,
+"
+completion_tokens
+"
+:
+4500
+}
+}
+OpenAI 兼容格式
+：若翻译服务使用 OpenAI Chat Completions API，响应格式为
+choices[0].message.content
+（需从中解析出标题和字幕）。
+translate.py
+应支持配置响应解析路径。
+16.3.4 分批翻译与时间戳保护（关键）
+字幕过长可能超出模型上下文窗口，需分批处理。
+核心原则：时间戳严格保留 ASR 原始值，LLM 仅负责翻译文本，不负责时间戳。
+Python
+def
+translate_in_batches
+(
+srt_content
+,
+original_title
+,
+translate_api
+,
+translate_key
+,
+batch_size
+=
+50
+,
+source_language
+=
+"
+auto
+"
+):
+"""
+将 SRT 按条数分批翻译，保持上下文连贯。
+时间戳保护：翻译后按顺序逐条配对，强校验条数一致，仅替换 text，时间戳沿用 ASR 原始值。
+条数不匹配时自动拆分重试，避免直接放弃整批。
+batch_size: 每批字幕条数，默认50条
+source_language: 源语言（由 ASR language 决定，透传给翻译 API）
+"""
+entries
+=
+parse_srt
+(
+srt_content
+)
+# 解析为 [{index, start, end, text, ...}, ...]
+batches
+=
+[
+entries
+[
+i
+:
+i
++
+batch_size
+]
+for
+i
+in
+range
+(
+0
+,
+len
+(
+entries
+),
+batch_size
+)]
+all_translated
+=
+[]
+translated_title
+=
+""
+for
+i
+,
+batch
+in
+enumerate
+(
+batches
+):
+batch_srt
+=
+entries_to_srt
+(
+batch
+)
+context
+=
+""
+if
+i
+>
+0
+:
+# 提供前一批最后几条的原文+译文作为上下文，保持术语一致
+context
+=
+"
+\n
+"
+.
+join
+([
+f
+"原文:
+{
+e
+[
+'
+original_text
+'
+]
+}\n
+译文:
+{
+e
+[
+'
+text
+'
+]
+}
+"
+for
+e
+in
+all_translated
+[
+-
+3
+:]
+])
+resp
+=
+call_translate
+(
+batch_srt
+,
+original_title
+if
+i
+==
+0
+else
+""
+,
+translate_api
+,
+translate_key
+,
+source_language
+=
+source_language
+,
+context
+=
+context
+)
+if
+i
+==
+0
+:
+translated_title
+=
+resp
+[
+"
+translated_title
+"
+]
+# 解析 LLM 返回的翻译结果
+translated_entries
+=
+parse_srt
+(
+resp
+[
+"
+translated_subtitle
+"
+])
+# 时间戳保护：按行号配对，仅替换 text，时间戳沿用 ASR 原始值
+# 条数不匹配时，缩小 batch_size 重试（而非直接报错放弃整批）
+if
+len
+(
+translated_entries
+)
+!=
+len
+(
+batch
+):
+if
+len
+(
+batch
+)
+>
+10
+:
+# 递归拆分：将当前 batch 再分两半分别翻译
+mid
+=
+len
+(
+batch
+)
+//
+2
+left_title
+,
+left_srt
+=
+translate_in_batches
+(
+entries_to_srt
+(
+batch
+[:
+mid
+]),
+original_title
+if
+i
+==
+0
+else
+""
+,
+translate_api
+,
+translate_key
+,
+batch_size
+=
+batch_size
+,
+source_language
+=
+source_language
+)
+right_title
+,
+right_srt
+=
+translate_in_batches
+(
+entries_to_srt
+(
+batch
+[
+mid
+:]),
+""
+,
+translate_api
+,
+translate_key
+,
+batch_size
+=
+batch_size
+,
+source_language
+=
+source_language
+)
+if
+i
+==
+0
+:
+translated_title
+=
+left_title
+or
+right_title
+# 合并两侧结果到 all_translated（省略具体合并逻辑）
+continue
+raise
+ValueError
+(
+f
+"翻译条数不匹配且已无法再拆分：原
+{
+len
+(
+batch
+)
+}
+条，译
+{
+len
+(
+translated_entries
+)
+}
+条"
+)
+for
+orig
+,
+trans
+in
+zip
+(
+batch
+,
+translated_entries
+):
+all_translated
+.
+append
+({
+"
+index
+"
+:
+orig
+[
+"
+index
+"
+],
+"
+start
+"
+:
+orig
+[
+"
+start
+"
+],
+# 保留 ASR 原始时间戳
+"
+end
+"
+:
+orig
+[
+"
+end
+"
+],
+# 保留 ASR 原始时间戳
+"
+start_seconds
+"
+:
+orig
+[
+"
+start_seconds
+"
+],
+"
+end_seconds
+"
+:
+orig
+[
+"
+end_seconds
+"
+],
+"
+text
+"
+:
+trans
+[
+"
+text
+"
+],
+# 仅替换翻译文本
+"
+original_text
+"
+:
+orig
+[
+"
+text
+"
+],
+# 保留原文供上下文使用
+})
+return
+translated_title
+,
+entries_to_srt
+(
+all_translated
+)
+关键安全措施
+：
+翻译后按行号配对，若条数不匹配则自动拆分 batch 重试，仍不匹配才报错，绝不强行拼装
+时间戳一律沿用 ASR 原始值，LLM 返回的时间戳被丢弃
+上下文同时携带原文+译文，确保术语一致
+16.3.5 适配说明
+和 ASR 一样，翻译 API 的具体格式取决于用户自有的服务。上例为最常见的自定义格式。
+translate.py
+应设计为可配置：
+请求体字段名可通过 KV 配置映射
+鉴权方式支持 Bearer Token 和自定义 Header
+响应解析路径可配置（如
+data.translated_subtitle
+vs
+choices[0].message.content
+）
+16.4 错误处理与重试
+两个 API 调用都需实现统一的错误处理：
+Python
+import
+time
+def
+call_with_retry
+(
+func
+,
+validator
+=
+None
+,
+max_retries
+=
+3
+,
+base_delay
+=
+5
+):
+"""
+带指数退避的重试包装，含响应结构校验。
+参数:
+func: 无参 callable，执行实际 API 调用并返回结果
+validator: 可选的校验函数，接收结果返回 bool。不传则跳过结构校验
+max_retries: 最大重试次数
+base_delay: 基础退避延迟（秒）
+"""
+for
+attempt
+in
+range
+(
+max_retries
+):
+try
+:
+result
+=
+func
+()
+# 响应结构校验（防止 HTTP 200 但响应体异常）
+if
+validator
+is
+not
+None
+and
+not
+validator
+(
+result
+):
+raise
+ValueError
+(
+"
+响应结构校验失败：缺少必要字段
+"
+)
+return
+result
+except
+requests
+.
+exceptions
+.
+Timeout
+:
+if
+attempt
+==
+max_retries
+-
+1
+:
+raise
+delay
+=
+base_delay
+*
+(
+2
+**
+attempt
+)
+print
+(
+f
+"超时，
+{
+delay
+}
+秒后重试 (
+{
+attempt
++
+1
+}
+/
+{
+max_retries
+}
+)"
+)
+time
+.
+sleep
+(
+delay
+)
+except
+requests
+.
+exceptions
+.
+HTTPError
+as
+e
+:
+status
+=
+e
+.
+response
+.
+status_code
+if
+status
+==
+429
+:
+# 限流
+retry_after
+=
+parse_retry_after
+(
+e
+.
+response
+.
+headers
+.
+get
+(
+"
+Retry-After
+"
+,
+"
+60
+"
+))
+retry_after
+=
+min
+(
+retry_after
+,
+120
+)
+# 最大等待120秒
+print
+(
+f
+"限流，等待
+{
+retry_after
+}
+秒"
+)
+time
+.
+sleep
+(
+retry_after
+)
+elif
+status
+>=
+500
+:
+# 服务端错误
+if
+attempt
+==
+max_retries
+-
+1
+:
+raise
+time
+.
+sleep
+(
+base_delay
+*
+(
+2
+**
+attempt
+))
+else
+:
+# 4xx 客户端错误，不重试
+raise
+except
+requests
+.
+exceptions
+.
+ConnectionError
+:
+if
+attempt
+==
+max_retries
+-
+1
+:
+raise
+time
+.
+sleep
+(
+base_delay
+*
+(
+2
+**
+attempt
+))
+except
+ValueError
+:
+# 响应结构校验失败，可重试
+if
+attempt
+==
+max_retries
+-
+1
+:
+raise
+time
+.
+sleep
+(
+base_delay
+*
+(
+2
+**
+attempt
+))
+def
+validate_asr_response
+(
+result
+):
+"""
+校验 MiMo ASR 响应：choices[0].message.content 必须为非空字符串
+"""
+if
+not
+isinstance
+(
+result
+,
+dict
+):
+return
+False
+choices
+=
+result
+.
+get
+(
+"
+choices
+"
+)
+if
+not
+isinstance
+(
+choices
+,
+list
+)
+or
+len
+(
+choices
+)
+==
+0
+:
+return
+False
+content
+=
+choices
+[
+0
+].
+get
+(
+"
+message
+"
+,
+{}).
+get
+(
+"
+content
+"
+)
+return
+isinstance
+(
+content
+,
+str
+)
+and
+len
+(
+content
+.
+strip
+())
+>
+0
+def
+validate_translate_response
+(
+result
+):
+"""
+校验翻译响应：translated_title 和 translated_subtitle 必须非空
+"""
+if
+not
+isinstance
+(
+result
+,
+dict
+):
+return
+False
+return
+bool
+(
+result
+.
+get
+(
+"
+translated_title
+"
+))
+and
+bool
+(
+result
+.
+get
+(
+"
+translated_subtitle
+"
+))
+# 使用示例：
+#   transcript = call_with_retry(
+#       lambda: call_mimo_asr(path, api, key, lang),
+#       validator=validate_asr_response
+#   )
+#   result = call_with_retry(
+#       lambda: call_translate(srt, title, api, key),
+#       validator=validate_translate_response
+#   )
+def
+parse_retry_after
+(
+value
+):
+"""
+解析 Retry-After 头（支持数字秒和 HTTP-date 格式）
+"""
+try
+:
+return
+int
+(
+value
+)
+except
+ValueError
+:
+from
+email
+.
+utils
+import
+parsedate_to_datetime
+from
+datetime
+import
+datetime
+,
+timezone
+try
+:
+dt
+=
+parsedate_to_datetime
+(
+value
+)
+return
+max
+(
+int
+((
+dt
+-
+datetime
+.
+now
+(
+timezone
+.
+utc
+)).
+total_seconds
+()),
+1
+)
+except
+Exception
+:
+return
+60
+16.5 从 SRT 转为 B 站字幕格式
+翻译完成后的 SRT 需转为 B 站
+submit_subtitle
+接口要求的格式：
+Python
+def
+srt_to_bili_subtitle
+(
+srt_content
+,
+lan
+=
+"
+zh-Hans
+"
+):
+"""
+SRT 转 B 站字幕 body 格式
+参数:
+srt_content: SRT 格式字幕文本
+lan: B 站语言代码
+- "zh-Hans": 简体中文（翻译后字幕，默认）
+- "en": 英文（原语言字幕）
+- "ja": 日语 / "ko": 韩语 等（按视频实际语言填写）
+"""
+entries
+=
+parse_srt
+(
+srt_content
+)
+body
+=
+[]
+for
+entry
+in
+entries
+:
+# 校验时间戳有效性
+if
+entry
+[
+"
+start_seconds
+"
+]
+>=
+entry
+[
+"
+end_seconds
+"
+]:
+continue
+# 跳过无效条目
+body
+.
+append
+({
+"
+from
+"
+:
+entry
+[
+"
+start_seconds
+"
+],
+# float，秒
+"
+to
+"
+:
+entry
+[
+"
+end_seconds
+"
+],
+# float，秒
+"
+content
+"
+:
+entry
+[
+"
+text
+"
+],
+})
+return
+{
+"
+lan
+"
+:
+lan
+,
+"
+data
+"
+:
+{
+"
+body
+"
+:
+body
+}
+}
+语言代码与 subtitle_mode 的对应关系
+：
+subtitle_mode
+上传字幕
+lan 参数
+translated
+仅中文字幕
+"zh-Hans"
+original
+仅原语言字幕
+按视频实际语言（
+"en"
+/
+"ja"
+/
+"ko"
+等）
+both
+原语言 + 中文字幕（两次调用）
+第一次
+"en"
+等，第二次
+"zh-Hans"
+none
+不上传字幕
+不调用此函数
+时间戳来自 ASR 原始值（翻译过程中不被篡改），确保字幕与口型对齐。
+16.6 完整调用链路
+纯文本
+yt-dlp 下载 → video.mp4 (100MB) + audio.mp3 (15MB)
+│
+├─ MiMo ASR 转录
+│   POST https://api.xiaomimimo.com/v1/chat/completions
+│   Header: api-key: sk-xxx
+│   Body: {model: "mimo-v2.5-asr", messages: [{input_audio: base64}], asr_options: {language: "auto"}}
+│   → 返回纯文本（choices[0].message.content）
+│
+├─ stable-ts 强制对齐
+│   model.align(audio_path, transcript_text) → 词级时间戳
+│   → split_by_length → 句子级 SRT
+│
+├─ 翻译 API 调用（可选，根据 subtitle_mode）
+│   POST https://your-llm.com/v1/translate
+│   Body: JSON {title, subtitle, source_lang, target_lang}
+│   Header: Authorization: Bearer sk-xxx
+│   → 返回 translated_title + translated_subtitle (SRT)
+│   → 分批处理（如字幕超过模型上下文窗口）
+│   → 时间戳按顺序逐条配对，仅替换文本
+│
+├─ 格式转换
+│   SRT → B 站 body 格式
+│   {"lan": "zh-Hans", "data": {"body": [{from, to, content}, ...]}}
+│
+└─ 提交到 B 站
+POST /x/v2/dm/web/subtitle/submit
+→ 字幕挂载到视频
+16.7 超时与资源规划
+环节
+短视频（~10分钟）
+长视频（~1小时）
+超时设置
+备注
+环境安装（pip+ffmpeg）
+60-120 秒
+60-120 秒
+180s
+PyTorch ~800MB + stable-ts 依赖
+模型下载（首次）
+30-60 秒
+30-60 秒
+120s
+small 模型 ~461MB；有 cache 时跳过
+模型加载
+5-10 秒
+5-10 秒
+30s
+整个流水线只加载一次
+yt-dlp 下载视频
+30-60 秒
+2-5 分钟
+300s
+取决于网络和视频大小
+ffmpeg 提取音频
+5-10 秒
+20-60 秒
+60s
+本地操作
+MiMo ASR 转录
+30-90 秒
+2-5 分钟
+(10, 600)s
+1 次 API 调用（长音频分段）
+stable-ts 强制对齐（CPU）
+1-3 分钟
+5-15 分钟
+300s
+无 GPU，CPU 推理比 GPU 慢 3-5 倍
+翻译 API 调用（可选）
+30-90 秒
+3-10 分钟
+(10, 300)s
+长字幕需分批；subtitle_mode=original/none 时跳过
+B 站上传+投稿
+2-5 分钟
+5-15 分钟
+(10, 600)s
+取决于视频大小
+单视频总计
+5-12 分钟
+20-55 分钟
+-
+不翻译时更快；首次 run 额外 +2 分钟安装
+短视频：5 个约 25-60 分钟（首次 run 额外 +3 分钟环境安装）
+长视频：建议单次处理 2-3 个，约 40-165 分钟
+均远低于 GitHub Actions 300 分钟超时
+首次 run 注意
+：无模型缓存时额外增加 30-60 秒下载时间，后续 run 有 cache 则跳过
+17. 安全说明
+17.1 敏感数据存储
+数据
+存储方式
+安全措施
+管理密码
+KV
+config.admin_password
+bcrypt 哈希存储，不存明文
+B 站 Cookie
+KV
+config
+AES-GCM 加密存储（主密钥放 Worker Secret）
+ASR/翻译 Key
+KV
+config
+同上加密
+GitHub PAT
+KV
+config
+同上加密；使用 Fine-grained PAT 最小权限
+Pipeline Token
+KV
+config.pipeline_token
+32 字节随机生成，支持后台一键重置
+17.2 传输安全
+接口
+鉴权方式
+安全措施
+管理接口
+Session（HttpOnly Cookie）
+登录后签发短期 Session，不每次传密码
+Pipeline 接口
+Authorization: Bearer
+Header
+Token 不走 URL Query，避免日志泄露
+17.3 访问控制
+措施
+说明
+登录限流
+同 IP 连续失败 5 次锁定 15 分钟
+CSRF 防护
+管理写操作需携带 CSRF Token
+Worker 暴露面
+建议绑定自定义域 + Cloudflare Access 策略，或加 IP 白名单
+17.4 GitHub PAT 最小权限
+使用 Fine-grained PAT，仅授权目标仓库的：
+Actions: Read and write
+（触发 workflow）
+Metadata: Read-only
+（基础访问）
+不使用 Classic PAT（权限过大）。
+18. 故障排查
+18.1 决策树
+纯文本
+状态页无运行记录
+├─ GitHub Actions 是否有运行记录？
+│   ├─ 是 → 检查 Actions 日志中哪一步失败
+│   └─ 否 → cron 是否被跳过？手动触发测试
+│
+状态页有记录但投稿失败
+├─ 失败阶段 = downloaded
+│   ├─ yt-dlp 报错 → 更新 yt-dlp 版本
+│   └─ 网络超时 → 检查 Runner 网络或视频大小
+│
+├─ 失败阶段 = asr
+│   ├─ 超时 → 长音频需分段
+│   └─ API 报错 → 检查 ASR 服务状态和密钥
+│
+├─ 失败阶段 = translated
+│   ├─ 条数不匹配 → 检查 LLM 返回是否截断，减小 batch_size
+│   └─ API 报错 → 检查翻译服务状态和密钥
+│
+├─ 失败阶段 = uploaded
+│   ├─ -101 账号未登录 → Cookie 过期，重新填入
+│   ├─ -509 请求过于频繁 → 触发风控，降低频率
+│   └─ 其他错误码 → 查阅 bilibili-API-collect 文档
+│
+├─ 失败阶段 = subtitled
+│   └─ 字幕接口报错 → 可能 B 站改版，需抓包验证
+│
+└─ 失败阶段 = seasoned
+└─ 合集接口报错 → 检查 section_id 是否正确
+18.2 常见错误码
+错误码
+含义
+处理
+-101
+账号未登录
+Cookie 过期，重新填入
+-111
+CSRF 失败
+bili_jct 不正确或已过期
+-509
+请求过于频繁
+降低操作频率，增加延迟
+-403
+访问权限不足
+检查账号状态
+-795
+视频审核中
+等待审核完成后再加合集
+18.3 查看详细日志
+流水线完整日志在 GitHub Actions 中查看：
+打开 GitHub 仓库
+点击 Actions 标签
+点击最近一次运行
+点击
+process
+job
+展开各步骤查看日志
+19. FAQ
+Q: 免费额度够用吗？
+A: 完全够用。Cloudflare Workers 免费层 10 万请求/天，KV 免费 1,000 写/天，GitHub Actions 私有仓库 2,000 分钟/月。日均消耗远低于限额。（详见 §20）
+Q: 支持多少个频道？
+A: 无硬性限制。但每次执行 RSS 发现的新视频最多处理
+MAX_VIDEOS_PER_RUN
+个（默认 5），手动队列视频不受此限制。频道过多时积压会增大。建议单账号关注不超过 20 个频道。
+Q: 视频最长多久？
+A: 理论上无限制，但 GitHub Actions 配置超时为 300 分钟（5 小时），系统上限 360 分钟（6 小时）。超过 1 小时的长视频建议单独处理，且 ASR 需分段。
+Q: 转载还是自制？
+A: 公司自有内容建议设为
+copyright=1
+（自制），非自有内容设为
+copyright=2
+（转载）。可在频道配置中按频道设置。
+Q: 可以不翻译只上传原语言字幕吗？
+A: 可以。在频道配置中将"字幕模式"设为"上传原语言字幕"即可跳过翻译，直接上传 ASR 生成的原语言字幕。还支持"双字幕"模式同时上传原语言+中文翻译，或"不上传字幕"模式。
+Q: 可以手动指定某个视频处理吗？
+A: 可以。在后台"手动添加视频"区块粘贴 YouTube 视频 URL，选择频道配置或单独指定参数，下次流水线执行时会优先处理手动队列中的视频。
+Q: 失败了怎么办？
+A: 后台状态页会标红显示失败原因和中断阶段。按 §18.1 故障排查决策树处理。配置了通知 Webhook 时会自动告警。
+Q: Cookie 多久过期？
+A: 约 30 天，但
+ac_time_value
+可自动续期，通常可维持数周至数月。详见 §8.7。
+Q: 下载失败怎么办？
+A: 大概率是 yt-dlp 版本过旧，YouTube 改版导致。在 workflow 中改为
+pip install -U yt-dlp
+即可。
+Q: 可以同时运行多个流水线吗？
+A: 不可以。Workflow 配置了
+concurrency
+组确保互斥，避免 Cookie 续期冲突。
+20. 成本估算
+20.1 免费额度消耗
+服务
+免费额度
+预计日消耗
+余量
+Cloudflare Workers 请求
+100,000 次/天
+~50 次
+99.95% 余量
+Cloudflare KV 写操作
+1,000 次/天
+~18 次
+98.2% 余量
+Cloudflare KV 存储
+1 GB
+<10 MB
+充足
+GitHub Actions 分钟数
+2,000 分钟/月（私有）
+~60 分钟/天 ≈ 1,800 分钟/月
+10% 余量
+YouTube Data API
+10,000 units/天
+~100 units（仅搜索）
+99% 余量
+GitHub Actions 余量提示
+：私有仓库 2,000 分钟/月，按每 4 小时执行一次、每次 10 分钟计算，月消耗约 1,800 分钟，余量仅 10%。若不够，可改用公共仓库（免费）或降低 cron 频率。
+20.2 ASR/翻译 API 成本
+ASR 和翻译 API 由用户自备，成本取决于所选方案：
+方案
+预估成本（1 小时音频）
+OpenAI Whisper API
+~$0.36
+自部署 faster-whisper
+免费（仅服务器成本）
+OpenAI GPT-4o-mini 翻译
+~$0.01-0.05
+自部署 LLM 翻译
+免费（仅服务器成本）
+21. 升级与备份
+21.1 升级指南
+项目迭代后通过 Git 更新：
+bash
+# 拉取最新代码
+git
+pull
+origin
+main
+# Worker 会自动部署（如已连接 Git）
+# Python 依赖更新
+pip
+install
+-r
+requirements.txt
+--upgrade
+版本兼容性
+：KV 数据结构变更时会在文档和代码中标注。如涉及
+config
+结构变更，后台会自动迁移。
+21.2 备份与恢复
+导出 KV 配置：
+bash
+# 导出 config 键
+wrangler
+kv:key
+get
+--binding=YT2BILI_KV
+"
+config
+"
+>
+config-backup.json
+# 导出 channels 键
+wrangler
+kv:key
+get
+--binding=YT2BILI_KV
+"
+channels
+"
+>
+channels-backup.json
+# 导出 manual_queue 键
+wrangler
+kv:key
+get
+--binding=YT2BILI_KV
+"
+manual_queue
+"
+>
+manual_queue-backup.json
+# 导出 processed 键
+wrangler
+kv:key
+get
+--binding=YT2BILI_KV
+"
+processed
+"
+>
+processed-backup.json
+# 导出 status 键
+wrangler
+kv:key
+get
+--binding=YT2BILI_KV
+"
+status
+"
+>
+status-backup.json
+恢复 KV 配置：
+bash
+wrangler
+kv:key
+put
+--binding=YT2BILI_KV
+"
+config
+"
+--path=config-backup.json
+wrangler
+kv:key
+put
+--binding=YT2BILI_KV
+"
+channels
+"
+--path=channels-backup.json
+wrangler
+kv:key
+put
+--binding=YT2BILI_KV
+"
+manual_queue
+"
+--path=manual_queue-backup.json
+wrangler
+kv:key
+put
+--binding=YT2BILI_KV
+"
+processed
+"
+--path=processed-backup.json
+wrangler
+kv:key
+put
+--binding=YT2BILI_KV
+"
+status
+"
+--path=status-backup.json
+建议定期备份（如每周），尤其在修改配置后。
+21.3 回滚
+Worker 回滚：Cloudflare Dashboard → Workers → Deployments → 选择历史版本回滚。
+Workflow 回滚：
+git revert
+回退代码变更，push 后自动部署。
+22. 术语表
+术语
+解释
+KV
+Cloudflare Key-Value 存储，一种简单的 NoSQL 数据库
+Worker
+Cloudflare Workers，边缘 Serverless 计算服务
+cron
+定时任务调度表达式，如
+0 */4 * * *
+表示每 4 小时
+PAT
+Personal Access Token，GitHub 个人访问令牌
+SRT
+SubRip 字幕格式，包含序号、时间戳、文本
+ASR
+Automatic Speech Recognition，语音识别
+stable-ts
+Python 库，利用 Whisper 模型进行强制对齐，将文本对齐到音频生成词级时间戳
+强制对齐
+Forced Alignment，将已有文本对齐到音频中的精确时间点
+LLM
+Large Language Model，大语言模型
+CSRF
+Cross-Site Request Forgery，跨站请求伪造（B 站用 bili_jct 防护）
+Netscape 格式
+Cookie 文件的标准文本格式（cookies.txt）
+repository_dispatch
+GitHub Actions 事件类型，通过 API 触发 workflow
+workflow_dispatch
+GitHub Actions 手动触发 workflow 的方式
+ac_time_value
+B 站 Cookie 刷新令牌，存储在浏览器 LocalStorage 中
+bvid
+B 站视频唯一标识（BV 开头）
+aid
+B 站视频内部 ID（纯数字）
+cid
+B 站视频章节 ID（用于字幕挂载）
+tid
+B 站投稿分区 ID
+season / section
+B 站合集 / 合集内的小节
+SESSDATA
+B 站登录凭证 Cookie
+bili_jct
+B 站 CSRF Token Cookie
+buvid3
+B 站设备标识 Cookie
+附录：技术决策记录
+A1. 为什么选择纯 Cookie 而非官方开放 API
+（详见 §3.2）
+维度
+官方开放 API
+纯 Cookie（最终选择）
+入驻门槛
+需企业资质申请
+零门槛
+CC 字幕
+不提供
+支持
+合集管理
+不提供
+支持
+自动续期
+OAuth refresh_token
+ac_time_value
+投稿能力
+完整
+完整
+结论
+：官方 API 缺少 CC 字幕和合集两个核心功能，且需企业入驻。纯 Cookie 方式功能完整、零门槛，配合自动续期足够稳定。
+A2. 为什么选择 Cloudflare KV 而非 D1
+（详见 §11）
+维度
+KV（最终选择）
+D1
+写入限制
+1,000 次/天
+100,000 次/天
+当前用量
+每天 ~18 次
+-
+复杂度
+简单 Key-Value
+需建表写 SQL
+适用场景
+配置存储
+关系型数据
+结论
+：当前规模下 KV 写入量极低（优化后每天 ~18 次），简单 Key-Value 足够。如未来规模扩大（日处理上百视频），可迁移到 D1。迁移触发阈值：日写入持续超过 500 次。
+A3. 为什么用批量回写而非逐条回写
+（详见 §11.3）
+KV 免费额度写操作 1,000 次/天
+逐条回写：5 个视频 = 5 次写入 + 1 次状态 = 6 次/执行
+批量回写：5 个视频本地累积 = 1 次写入 + 1 次状态 = 2 次/执行
+按 cron 每 4 小时一次：批量 = 12 次/天，逐条 = 36 次/天
+批量回写余量更大，更安全
+A4. 为什么不让 LLM 负责时间戳
+LLM 翻译时常会合并/拆分条目、改写时间格式、漏掉条目，导致时间轴错位。因此采用"原文 SRT 条目数 = 译文条目数"的强约束：按顺序逐条配对，仅替换
+text
+，时间戳一律沿用 ASR 原始值。若 LLM 返回条目数不匹配则判失败重试，绝不强行拼装。（详见 §16.3.4）
+END
+相关文章
+暂无相关文章
+-
+/
+RSS
+/
+Sitemap
+/
+萌ICP备20260132号
+Powered by
+Tanstack Start
+&
+Flare Stack Blog
