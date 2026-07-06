@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>YT2BILI 管理后台</title>
+  <script>
+    // 根据初始化状态决定跳转目标
+    (function() {
+      // 先检查后端是否已初始化
+      fetch('/api/init-status', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          location.href = data.initialized ? '控制台.html' : '登录.html';
+        })
+        .catch(function() {
+          // 后端未启动（纯静态访问），直接跳登录页
+          location.href = '登录.html';
+        });
+    })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <p style="font-family: sans-serif; text-align: center; padding: 40px;">正在跳转…</p>
+</body>
+</html>
