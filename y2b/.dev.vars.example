@@ -1,0 +1,5 @@
+# 本地开发环境变量示例
+# 复制为 .dev.vars 并修改值
+# 加密主密钥,任意长度字符串(经 SHA-256 派生为 32 字节 AES 密钥)
+# 生产环境用 `wrangler secret put ENCRYPTION_KEY` 注入
+ENCRYPTION_KEY="change-me-to-a-random-32-bytes-or-longer-string"

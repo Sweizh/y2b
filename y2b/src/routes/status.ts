@@ -46,6 +46,8 @@ app.post('/trigger', async (c) => {
   if (!owner || !repo) {
     return c.json({ error: 'GitHub 仓库格式不正确，应为 owner/repo' }, 400);
   }
+  const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  const start = Date.now();
   try {
     // 触发 workflow_dispatch 事件
     const url = `https://api.github.com/repos/${owner}/${repo}/dispatches`;
@@ -62,16 +64,19 @@ app.post('/trigger', async (c) => {
       }),
     });
     if (resp.status === 204) {
+      console.log(JSON.stringify({ timestamp: new Date().toISOString(), event: 'trigger', status: 'success', requestId, repo: cfg.gh_repo, duration: Date.now() - start }));
       return c.json({ success: true, message: '已触发流水线，请稍后刷新查看结果' });
     }
     const text = await resp.text();
     let data: any = null;
     try { data = JSON.parse(text); } catch {}
+    console.log(JSON.stringify({ timestamp: new Date().toISOString(), event: 'trigger', status: 'github_error', requestId, httpStatus: resp.status, duration: Date.now() - start }));
     return c.json({
       error: data?.message || `GitHub API 返回 ${resp.status}`,
       raw: data,
     }, 502);
   } catch (e: any) {
+    console.log(JSON.stringify({ timestamp: new Date().toISOString(), event: 'trigger', status: 'exception', requestId, error: e.message, duration: Date.now() - start }));
     return c.json({ error: '触发失败：' + (e.message || e) }, 502);
   }
 });
