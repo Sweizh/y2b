@@ -10,7 +10,7 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 - **运行状态**：上次运行时间、累计处理数、处理记录表(含状态色标)、立即触发流水线、**已处理视频列表**(含删除触发重新处理)、**失败通知配置**(Webhook URL + 启用开关)
 - **手动队列**：多行 URL 批量添加(支持完整 URL / 短链接 / 纯视频 ID)、删除二次确认、**可选 B 站合集**(优先级:手动指定 > 频道默认 > 不进合集)
 - **Pipeline API**：供 GitHub Actions Runner 调用，Bearer Token 鉴权
-- **GitHub Actions 流水线**：Worker `/api/trigger` 触发 `repository_dispatch` 事件,启动 `process.yml` 运行 Python Runner
+- **GitHub Actions 流水线**：Worker `/api/status/trigger` 触发 `repository_dispatch` 事件,启动 `process.yml` 运行 Python Runner
 - **Python Runner**：yt-dlp 下载 → ffmpeg 提取音频 → ASR 转写 → 翻译字幕 → bilibili-api-python 上传 → 追加合集
 - **标题翻译模板**：全局配置 `title_template`,支持变量 `{channel}`(频道名)、`{title}`(翻译后标题),通过翻译 API prompt 注入实现;留空则不翻译不套模板(向后兼容)
 - **Cookie 自动续期**：检测 ac_time_value 距过期 < 1 小时自动调用 B 站刷新接口,新 Cookie 回写 Worker
@@ -48,7 +48,7 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 │       ├── channels.ts       # CRUD /api/channels
 │       ├── bili.ts           # /api/seasons /api/tids /api/test/bili
 │       ├── youtube.ts        # /api/youtube/search
-│       ├── status.ts         # GET /api/status + POST /api/trigger
+│       ├── status.ts         # GET /api/status + POST /api/status/trigger
 │       ├── processed.ts      # GET/DELETE /api/processed
 │       ├── manual.ts         # CRUD /api/manual-queue
 │       ├── tests.ts          # /api/test/{asr,translate,github}
@@ -321,7 +321,7 @@ npm run deploy
 | GET | `/api/tids` | 投稿分区列表（静态表） |
 | GET | `/api/youtube/search?q=` | 代理搜索 YouTube 频道 |
 | GET | `/api/status` | 运行状态 |
-| POST | `/api/trigger` | 触发 GitHub Actions |
+| POST | `/api/status/trigger` | 触发 GitHub Actions |
 | GET/DELETE | `/api/processed[/:videoId]` | 已处理视频 |
 | GET/POST/DELETE | `/api/manual-queue[/:videoId]` | 手动视频队列 |
 | POST | `/api/test/bili` | 测试 B 站 Cookie |

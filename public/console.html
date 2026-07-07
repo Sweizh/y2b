@@ -1974,7 +1974,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     if(execBtn){
       execBtn.addEventListener('click',function(){
         setBtnLoading(execBtn,true,'触发中…');
-        fetch('/api/trigger',{method:'POST',credentials:'include'})
+        fetch('/api/status/trigger',{method:'POST',credentials:'include'})
           .then(apiSafeJson)
           .then(function(d){
             setBtnLoading(execBtn,false);
