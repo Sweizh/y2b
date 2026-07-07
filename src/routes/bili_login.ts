@@ -19,7 +19,7 @@ const app = new Hono<{ Bindings: Env }>();
 const BILI_NAV_URL = 'https://api.bilibili.com/x/web-interface/nav';
 const BILI_QRCODE_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate';
 const BILI_QRCODE_INFO = 'https://passport.bilibili.com/x/passport-login/web/qrcode/poll';
-const BILI_FINGER_SPIDE = 'https://api.bilibili.com/x/frontend/finger/spide';
+const BILI_FINGER_SPI = 'https://api.bilibili.com/x/frontend/finger/spi';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
@@ -85,22 +85,28 @@ app.get('/qrcode', async (c) => {
   }
 });
 
-// 获取 buvid3:调 finger/spide 接口,失败用随机 UUID 兜底
-// buvid3 是 B 站风控必需的设备指纹标识
+// 获取 buvid3:调 finger/spi 接口拿真实设备指纹
+// buvid3 格式如 "AF0E8DB1-...-36043infoc",是 B 站风控必需的
+// 随机 UUID 不带 infoc 后缀会被风控拒绝("request was banned")
 async function getBuvid3(requestId: string): Promise<string> {
   try {
-    const resp = await fetch(BILI_FINGER_SPIDE, {
+    const resp = await fetch(BILI_FINGER_SPI, {
       headers: { 'User-Agent': UA },
     });
-    const data = await resp.json() as any;
-    if (data.code === 0 && data.data?.b_3) {
-      return data.data.b_3 as string;
+    const ct = resp.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      log('bili_finger', 'warning', { requestId, status: resp.status, contentType: ct });
+    } else {
+      const data = await resp.json() as any;
+      if (data.code === 0 && data.data?.b_3) {
+        return data.data.b_3 as string;
+      }
+      log('bili_finger', 'warning', { requestId, code: data.code, message: data.message });
     }
-    log('bili_finger', 'warning', { requestId, code: data.code, message: data.message });
   } catch (e: any) {
     log('bili_finger', 'warning', { requestId, error: e.message });
   }
-  // 兜底:生成 UUID 格式的 buvid3(B 站校验宽松)
+  // 兜底:生成 UUID 格式的 buvid3(不带 infoc 后缀,可能被风控拒绝)
   return crypto.randomUUID().toUpperCase();
 }
 
