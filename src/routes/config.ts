@@ -17,9 +17,12 @@ app.put('/', async (c) => {
   const existing = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
 
   // 允许更新的字段白名单(admin_password/pipeline_token/initialized 不在此列)
+  // yt_access_token/refresh_token 等通过 OAuth 流程自动写入,不在此列
   const ALLOWED_FIELDS = [
     'bili_sessdata', 'bili_jct', 'bili_buvid3', 'ac_time_value',
-    'yt_api_key', 'yt_cookies', 'gh_token', 'gh_repo',
+    'yt_api_key', 'yt_cookies',
+    'yt_client_id', 'yt_client_secret', 'yt_redirect_uri',  // OAuth 客户端配置(管理员手动填)
+    'gh_token', 'gh_repo',
     'asr_api', 'asr_key', 'translate_api', 'translate_key',
     'notify_webhook',
   ];

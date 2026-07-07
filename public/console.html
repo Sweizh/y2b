@@ -123,6 +123,10 @@
   --state-error-surface: #ffecea;
   --state-error-foreground: #ffffff;
 
+  /* state-warning */
+  --state-warning: #d97706;
+  --state-warning-surface: rgba(217, 119, 6, 0.12);
+
   /* ===== SEMANTIC ROLES ===== */
 
   /* semantic */
@@ -216,6 +220,10 @@
   --border: var(--background-700);
   --input: var(--background-700);
   --ring: var(--brand-400);
+
+  /* state-warning (dark theme) */
+  --state-warning: #f59e0b;
+  --state-warning-surface: rgba(245, 158, 11, 0.14);
 
   --icon: var(--icon-50);
   --icon-muted: var(--icon-500);
@@ -358,7 +366,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
    </div>
    </div>
 */
-body{margin:0;padding:12px;background:var(--background);color:var(--foreground);font:500 14px/1.4 var(--font-sans)}.row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}.label{width:72px;padding-top:6px;color:var(--muted-foreground);font-size:10px;letter-spacing:.12em;text-transform:uppercase;flex:0 0 auto}.grid{display:grid;gap:8px;flex:1}.grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--card-foreground);box-shadow:var(--shadow-xs);transition:border-color .2s ease,transform .2s ease}.card:hover{border-color:var(--primary);transform:translateY(-1px)}.media{aspect-ratio:1;border-radius:calc(var(--radius) - 4px);background:linear-gradient(135deg,var(--secondary),var(--background));border:1px solid var(--border)}.story .media{aspect-ratio:1.25;background:linear-gradient(135deg,var(--foreground),var(--secondary))}.eyebrow{color:var(--muted-foreground);font-size:10px;letter-spacing:.08em;text-transform:uppercase}.title{font-size:15px;line-height:1.25}.price{font-variant-numeric:tabular-nums}.cta{display:inline-flex;align-self:flex-start;padding:7px 10px;border-radius:999px;background:var(--primary);color:var(--primary-foreground);font-size:12px;text-decoration:none}.muted{color:var(--muted-foreground)}.is-disabled{opacity:.55}.divider{margin:10px 0;border:0;border-top:1px solid var(--border)}
+body{margin:0;padding:12px;background:var(--background);color:var(--foreground);font:500 14px/1.4 var(--font-sans)}.row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}.label{width:72px;padding-top:6px;color:var(--muted-foreground);font-size:10px;letter-spacing:.12em;text-transform:uppercase;flex:0 0 auto}.grid{display:grid;gap:8px;flex:1}.grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--card-foreground);box-shadow:var(--shadow-xs);transition:border-color .2s ease,transform .2s ease}.card:hover{border-color:var(--primary);transform:translateY(-1px)}.media{aspect-ratio:1;border-radius:calc(var(--radius) - 4px);background:linear-gradient(135deg,var(--secondary),var(--background));border:1px solid var(--border)}.story .media{aspect-ratio:1.25;background:linear-gradient(135deg,var(--foreground),var(--secondary))}.eyebrow{color:var(--muted-foreground);font-size:10px;letter-spacing:.08em;text-transform:uppercase}.title{font-size:15px;line-height:1.25}.price{font-variant-numeric:tabular-nums}.cta{display:inline-flex;align-self:flex-start;padding:7px 10px;border-radius:999px;background:var(--primary);color:var(--primary-foreground);font-size:12px;text-decoration:none}.muted{color:var(--muted-foreground)}.divider{margin:10px 0;border:0;border-top:1px solid var(--border)}
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
@@ -404,21 +412,39 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     <style>
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      [data-icon] {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        -webkit-mask-size: contain;
-        mask-size: contain;
-        -webkit-mask-repeat: no-repeat;
-        mask-repeat: no-repeat;
-        -webkit-mask-position: center;
-        mask-position: center;
-        background-color: currentColor;
-      }
     </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
+
+<!-- OAuth 回调处理:检测 URL hash 并通过 postMessage 通知 opener 后关闭窗口 -->
+<script>
+  (function(){
+    if(!window.location.hash)return;
+    var hash=window.location.hash.slice(1);
+    var parts=hash.split('&');
+    var first=parts[0]||'';
+    var params={};
+    parts.forEach(function(p){
+      var idx=p.indexOf('=');
+      if(idx>0){params[decodeURIComponent(p.slice(0,idx))]=decodeURIComponent(p.slice(idx+1));}
+    });
+    var result=null;
+    if(first.indexOf('youtube-oauth-success')===0){
+      result={type:'yt-oauth-result',success:true,email:params.email||'',cookie_error:params.cookie_error||''};
+    }else if(first.indexOf('youtube-oauth-partial')===0){
+      result={type:'yt-oauth-result',success:true,partial:true,email:params.email||'',error:params.cookie_error||'Cookie 铸造失败'};
+    }else if(first.indexOf('youtube-oauth-failed')===0){
+      result={type:'yt-oauth-result',success:false,error:params.error||'OAuth 登录失败'};
+    }
+    if(result){
+      try{window.opener&&window.opener.postMessage(result,'*');}catch(e){}
+      // 显示关闭提示,然后尝试关闭窗口
+      document.title='OAuth 登录完成';
+      document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-family:system-ui,sans-serif;background:#fff;color:#333"><p style="font-size:16px;font-weight:500">'+(result.success?'登录成功':'登录失败')+'</p><p style="font-size:13px;color:#888">'+(result.error||result.email||'')+'</p><a href="javascript:void(0)" onclick="try{window.close();}catch(e){}" style="font-size:13px;color:#007aff;text-decoration:underline">可关闭此窗口</a></div>';
+      setTimeout(function(){try{window.close();}catch(e){}},800);
+    }
+  })();
+</script>
 
 <!-- ===== DASHBOARD LAYOUT: Sidebar + Main Content ===== -->
 <div class="flex min-h-screen">
@@ -436,23 +462,23 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     <!-- Nav Items -->
     <nav class="flex-1 flex flex-col gap-1 px-3" aria-label="Dashboard navigation">
       <a data-dom-id="nav-credentials" href="#section-credentials" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--brand-500);background:var(--brand-50)">
-        <span data-icon="user" style="width:18px;height:18px"></span>
+        <i data-lucide="user" style="width:18px;height:18px"></i>
         <span>账号凭证</span>
       </a>
       <a data-dom-id="nav-ai-services" href="#section-ai-services" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <span data-icon="box" style="width:18px;height:18px"></span>
+        <i data-lucide="box" style="width:18px;height:18px"></i>
         <span>AI 服务</span>
       </a>
       <a data-dom-id="nav-channels" href="#section-channels" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <span data-icon="folder-open" style="width:18px;height:18px"></span>
+        <i data-lucide="folder-open" style="width:18px;height:18px"></i>
         <span>频道管理</span>
       </a>
       <a data-dom-id="nav-status" href="#section-status" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <span data-icon="circle-play" style="width:18px;height:18px"></span>
+        <i data-lucide="circle-play" style="width:18px;height:18px"></i>
         <span>运行状态</span>
       </a>
       <a data-dom-id="nav-manual" href="#section-manual" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <span data-icon="circle-plus" style="width:18px;height:18px"></span>
+        <i data-lucide="circle-plus" style="width:18px;height:18px"></i>
         <span>手动添加</span>
       </a>
     </nav>
@@ -464,7 +490,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         <span>切换主题</span>
       </button>
       <button data-dom-id="logout-btn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors duration-150" style="color:var(--apple-muted-foreground);background:transparent">
-        <span data-icon="arrow-left" style="width:18px;height:18px"></span>
+        <i data-lucide="arrow-left" style="width:18px;height:18px"></i>
         <span>退出登录</span>
       </button>
     </div>
@@ -472,7 +498,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
   <!-- Mobile hamburger button -->
   <button id="mobile-menu-btn" class="fixed top-4 left-4 z-50 hidden p-2 rounded-lg" style="background:var(--apple-card);border:1px solid var(--apple-border);box-shadow:var(--shadow-xs)" aria-label="打开菜单">
-    <span data-icon="chevron-down" style="width:20px;height:20px;transform:rotate(-90deg)"></span>
+    <i data-lucide="chevron-down" style="width:20px;height:20px;transform:rotate(-90deg)"></i>
   </button>
 
   <!-- Main Content Area -->
@@ -491,14 +517,22 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           <p class="text-sm mt-1" style="color:var(--apple-muted-foreground)">管理 B 站、YouTube、GitHub 的 API 密钥和认证令牌。敏感信息已脱敏显示。</p>
         </div>
 
+        <!-- 修改密码 + 扫码登录 B 站 (section top actions) -->
+        <div class="flex flex-wrap items-center gap-3 mb-5 pb-4" style="border-bottom:1px solid var(--apple-border)">
+          <button data-dom-id="change-password-btn" class="h-9 px-4 rounded-lg text-xs font-medium transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">修改密码</button>
+          <div class="flex items-center gap-2">
+            <button data-dom-id="bili-qrcode-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">扫码登录 B 站</button>
+            <span data-dom-id="bili-login-status" class="text-xs" style="color:var(--apple-muted-foreground)">未登录</span>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
 
-          <!-- 管理密码 -->
+          <!-- 管理密码 (read-only status display, no test button) -->
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">管理密码</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+              <span data-dom-id="admin-password-status" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono flex items-center" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-muted-foreground)">--</span>
             </div>
           </div>
 
@@ -535,6 +569,29 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             <div class="flex items-center gap-2">
               <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+            </div>
+          </div>
+
+          <!-- OAuth 登录 YouTube + OAuth 配置 (above YouTube API Key) -->
+          <div class="flex flex-col gap-2 md:col-span-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <button data-dom-id="yt-oauth-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">OAuth 登录 YouTube</button>
+              <span data-dom-id="yt-login-status" class="text-xs" style="color:var(--apple-muted-foreground)">未登录</span>
+              <button type="button" data-dom-id="yt-oauth-config-toggle" class="text-xs underline ml-auto transition-colors duration-150" style="color:var(--apple-muted-foreground);background:none;border:none;cursor:pointer;padding:0">OAuth 配置 ▾</button>
+            </div>
+            <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mt-1" style="display:none">
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client ID</label>
+                <input type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client Secret</label>
+                <input type="password" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              </div>
+              <div class="flex flex-col gap-1.5 md:col-span-2">
+                <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Redirect URI</label>
+                <input type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              </div>
             </div>
           </div>
 
@@ -576,7 +633,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
         <!-- Save button -->
         <div class="flex justify-end mt-6">
-          <button class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存</button>
+          <button data-dom-id="credentials-save-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存</button>
         </div>
       </section>
 
@@ -630,7 +687,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
         <!-- Save button -->
         <div class="flex justify-end mt-6">
-          <button class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存</button>
+          <button data-dom-id="ai-save-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存</button>
         </div>
       </section>
 
@@ -659,7 +716,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         <!-- Actions -->
         <div class="flex items-center justify-between pt-2">
           <span class="text-xs" style="color:var(--apple-muted-foreground)">通过上方搜索框添加新频道</span>
-          <button class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存频道配置</button>
+          <button data-dom-id="channels-save-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存频道配置</button>
         </div>
       </section>
 
@@ -695,7 +752,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
         <!-- Execute Now button -->
         <div class="mb-5">
-          <button class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">立即执行</button>
+          <button data-dom-id="trigger-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">立即执行</button>
         </div>
 
         <!-- Processing records table -->
@@ -749,7 +806,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
               <p class="text-xs mt-0.5" style="color:var(--apple-muted-foreground)">Cookie 失效或流水线连续失败 ≥ 3 次时调用 Webhook 告警</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="notify-enabled" class="sr-only peer">
+              <input type="checkbox" id="notify-enabled" class="sr-only">
               <div class="relative w-10 h-5 rounded-full transition-colors" style="background:var(--background-400)">
                 <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-all" style="background:var(--background-50)"></div>
               </div>
@@ -775,10 +832,10 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         <div class="flex flex-col gap-3 mb-5">
           <textarea rows="3" placeholder="输入 YouTube 视频 URL，每行一个&#10;支持完整URL、短链接、纯视频ID" class="w-full px-4 py-3 rounded-lg text-sm resize-none" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)"></textarea>
           <div class="flex items-center gap-3">
-            <select class="h-10 px-3 rounded-lg text-sm shrink-0" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+            <select data-dom-id="manual-channel-select" class="h-10 px-3 rounded-lg text-sm shrink-0" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <option value="">不指定频道</option>
             </select>
-            <button class="h-10 px-6 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">添加到队列</button>
+            <button data-dom-id="manual-add-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">添加到队列</button>
           </div>
         </div>
 
@@ -961,13 +1018,15 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   }
 
   var helpTexts={
-    'admin_password':{title:'管理密码 · 获取方式',html:'首次访问后台时设置的密码，用于登录管理后台。<br><br>如需重置：在 Cloudflare Dashboard → Workers & Pages → 你的 Worker → KV → 找到 <code>YT2BILI_KV</code> 命名空间 → 删除 <code>config</code> 键，然后重新访问域名初始化。'},
-    'bili_sessdata':{title:'B站 SESSDATA · 获取方式',html:'1. 在浏览器登录 <a href="https://www.bilibili.com">bilibili.com</a><br>2. 按 F12 打开开发者工具 → Application（应用程序）标签<br>3. 左侧 Storage → Cookies → <code>https://www.bilibili.com</code><br>4. 找到名为 <code>SESSDATA</code> 的 Cookie，复制 Value 列的值<br><br>注意：SESSDATA 有有效期，过期后需重新获取。系统检测到过期会自动尝试续期。'},
+    'bili_sessdata':{title:'B站 SESSDATA · 获取方式',html:'1. 在浏览器登录 <a href="https://www.bilibili.com">bilibili.com</a><br>2. 按 F12 打开开发者工具 → Application（应用程序）标签<br>3. 左侧 Storage → Cookies → <code>https://www.bilibili.com</code><br>4. 找到名为 <code>SESSDATA</code> 的 Cookie，复制 Value 列的值<br><br>注意：SESSDATA 有有效期，过期后需重新获取。系统检测到过期会自动尝试续期。<br><br>也可点击上方「扫码登录 B 站」按钮自动获取。'},
     'bili_jct':{title:'B站 bili_jct · 获取方式',html:'同 SESSDATA 的获取方式，Cookie 名为 <code>bili_jct</code>（即 CSRF Token）。<br><br>1. 在 bilibili.com 登录<br>2. F12 → Application → Cookies → <code>https://www.bilibili.com</code><br>3. 找到 <code>bili_jct</code>，复制 Value'},
     'bili_buvid3':{title:'B站 buvid3 · 获取方式',html:'同 SESSDATA 的获取方式，Cookie 名为 <code>buvid3</code>。<br><br>1. 在 bilibili.com 登录<br>2. F12 → Application → Cookies → <code>https://www.bilibili.com</code><br>3. 找到 <code>buvid3</code>，复制 Value'},
     'ac_time_value':{title:'B站 ac_time_value · 获取方式',html:'用于 Cookie 自动续期。<br><br>1. 在 bilibili.com 登录后，访问 <a href="https://api.bilibili.com/x/web-interface/nav">nav 接口</a><br>2. 返回的 JSON 中找到 <code>data.wbi_img.img_url</code> 和 <code>data.wbi_img.sub_url</code><br>3. URL 路径中包含 <code>ac_time_value</code> 参数（形如 <code>ac_time_value=xxxxx</code>）<br>4. 复制该参数的值<br><br>系统会定期检查并自动续期，距过期不足 1 小时时触发刷新。'},
     'yt_api_key':{title:'YouTube API Key · 获取方式',html:'1. 访问 <a href="https://console.cloud.google.com/">Google Cloud Console</a>，登录 Google 账号<br>2. 点击顶栏项目下拉 → 新建项目（或选择已有项目）<br>3. 左侧菜单 → APIs &amp; Services → Library → 搜索 <code>YouTube Data API v3</code> → 点击 Enable<br>4. 左侧菜单 → APIs &amp; Services → Credentials → Create Credentials → API Key<br>5. 复制生成的 API Key（以 <code>AIza</code> 开头）<br><br>用于频道搜索功能。不配置时频道搜索不可用，但不影响已关注频道的自动投稿。'},
-    'yt_cookies':{title:'YouTube Cookie · 获取方式',html:'用于 yt-dlp 绕过年龄限制等。<br><br>1. 在浏览器登录 <a href="https://www.youtube.com">youtube.com</a><br>2. F12 → Application → Cookies → <code>https://www.youtube.com</code><br>3. 复制以下字段的值，拼接成 <code>key=value; key=value</code> 格式：<br>　• <code>VISITOR_INFO1_LIVE</code><br>　• <code>HSID</code><br>　• <code>SSID</code><br>　• <code>SID</code>（可选）<br><br>示例：<code>VISITOR_INFO1_LIVE=xxx; HSID=xxx; SSID=xxx</code>'},
+    'yt_cookies':{title:'YouTube Cookie · 获取方式',html:'用于 yt-dlp 绕过年龄限制等。<br><br>1. 在浏览器登录 <a href="https://www.youtube.com">youtube.com</a><br>2. F12 → Application → Cookies → <code>https://www.youtube.com</code><br>3. 复制以下字段的值，拼接成 <code>key=value; key=value</code> 格式：<br>　• <code>VISITOR_INFO1_LIVE</code><br>　• <code>HSID</code><br>　• <code>SSID</code><br>　• <code>SID</code>（可选）<br><br>示例：<code>VISITOR_INFO1_LIVE=xxx; HSID=xxx; SSID=xxx</code><br><br>也可点击上方「OAuth 登录 YouTube」自动获取（OAuth 成功后由后端铸造 SAPISID Cookie）。'},
+    'yt_client_id':{title:'YouTube OAuth Client ID · 获取方式',html:'1. 访问 <a href="https://console.cloud.google.com/">Google Cloud Console</a><br>2. APIs &amp; Services → Credentials → Create Credentials → OAuth client ID<br>3. Application type 选 Web application<br>4. Authorized redirect URIs 添加 <code>&lt;Worker 域名&gt;/api/youtube/oauth/callback</code><br>5. 创建后复制 Client ID<br><br>启用 YouTube Data API v3 后,OAuth 登录可替代 API Key 用于频道搜索,并自动获取 yt_cookies 用于下载高清视频。'},
+    'yt_client_secret':{title:'YouTube OAuth Client Secret · 获取方式',html:'与 Client ID 同时创建。在 Credentials 页面点击对应 OAuth 客户端,复制 Client Secret。<br><br>注意: Secret 只在创建时显示,请妥善保存。如丢失需重新创建 OAuth 客户端。'},
+    'yt_redirect_uri':{title:'YouTube OAuth Redirect URI · 获取方式',html:'格式:<code>&lt;Worker 域名&gt;/api/youtube/oauth/callback</code><br><br>必须与 Google Cloud Console 中 OAuth 客户端的 Authorized redirect URIs 完全一致(包括协议 https:// 和路径)。'},
     'gh_token':{title:'GitHub Token · 获取方式',html:'1. 访问 <a href="https://github.com/settings/tokens">GitHub Settings → Tokens</a><br>2. 点击 Generate new token → Generate new token (classic)<br>3. Note 填写用途（如 <code>yt2bili-trigger</code>），Expiration 选择有效期<br>4. 勾选 <code>repo</code> 权限（用于触发 workflow_dispatch 事件）<br>5. 点击 Generate token<br>6. 复制生成的 token（以 <code>ghp_</code> 开头）<br><br>注意：token 只在创建时显示一次，请妥善保存。如丢失需重新生成。'},
     'gh_repo':{title:'GitHub 仓库 · 获取方式',html:'格式：<code>用户名/仓库名</code>，如 <code>Sweizh/y2b</code>。<br><br>这是存放 GitHub Actions workflow（<code>.github/workflows/process.yml</code>）的仓库。系统通过该仓库的 <code>repository_dispatch</code> 事件触发流水线运行 Python Runner。<br><br>如果你 fork 了本仓库，填写你 fork 后的仓库地址。'},
     'asr_api':{title:'语音识别 API 地址 · 获取方式',html:'支持 OpenAI 兼容的 Chat Completions 格式。用于将视频音频转写为字幕。<br><br>常见服务商端点：<br>• OpenAI：<code>https://api.openai.com/v1/chat/completions</code><br>• Azure OpenAI：<code>https://你的资源名.openai.azure.com/openai/deployments/你的部署名/chat/completions?api-version=2024-02-15-preview</code><br>• 其他兼容服务商：填入对应的 chat completions 端点'},
@@ -977,10 +1036,10 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   };
 
   var helpFieldMap={
-    '管理密码':'admin_password',
     'B站 SESSDATA':'bili_sessdata','B站 bili_jct':'bili_jct',
     'B站 buvid3':'bili_buvid3','B站 ac_time_value':'ac_time_value',
     'YouTube API Key':'yt_api_key','YouTube Cookie':'yt_cookies',
+    'YouTube OAuth Client ID':'yt_client_id','YouTube OAuth Client Secret':'yt_client_secret','YouTube OAuth Redirect URI':'yt_redirect_uri',
     'GitHub Token':'gh_token','GitHub 仓库':'gh_repo',
     '语音识别 API 地址':'asr_api','语音识别 API 密钥':'asr_key',
     '翻译 API 地址':'translate_api','翻译 API 密钥':'translate_key'
@@ -1139,17 +1198,17 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   // ===== 加载配置到表单 =====
   function loadConfigToForm(){
     return fetch('/api/config',{credentials:'include'})
-      .then(function(r){return r.json();})
+      .then(apiSafeJson)
       .then(function(cfg){
         // 账号凭证区块
         var credSection=document.getElementById('section-credentials');
         if(credSection){
           var inputs=credSection.querySelectorAll('input,textarea');
           var fieldMap={
-            '管理密码':'admin_password',
             'B站 SESSDATA':'bili_sessdata','B站 bili_jct':'bili_jct',
             'B站 buvid3':'bili_buvid3','B站 ac_time_value':'ac_time_value',
             'YouTube API Key':'yt_api_key','YouTube Cookie':'yt_cookies',
+            'YouTube OAuth Client ID':'yt_client_id','YouTube OAuth Client Secret':'yt_client_secret','YouTube OAuth Redirect URI':'yt_redirect_uri',
             'GitHub Token':'gh_token','GitHub 仓库':'gh_repo'
           };
           inputs.forEach(function(inp){
@@ -1163,6 +1222,41 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
               inp.value=cfg[key];
             }
           });
+          // 管理密码只读状态显示(用 initialized 作为代理)
+          var pwdStatus=credSection.querySelector('[data-dom-id="admin-password-status"]');
+          if(pwdStatus){
+            if(cfg.initialized){
+              pwdStatus.textContent='已设置';
+              pwdStatus.style.color='var(--state-success)';
+            }else{
+              pwdStatus.textContent='未设置';
+              pwdStatus.style.color='var(--apple-muted-foreground)';
+            }
+          }
+          // B 站扫码登录状态显示
+          var biliStatus=credSection.querySelector('[data-dom-id="bili-login-status"]');
+          if(biliStatus){
+            if(cfg.bili_login_at && cfg.bili_login_at>0){
+              var biliDt=new Date(cfg.bili_login_at);
+              var biliTs=biliDt.getFullYear()+'-'+String(biliDt.getMonth()+1).padStart(2,'0')+'-'+String(biliDt.getDate()).padStart(2,'0')+' '+String(biliDt.getHours()).padStart(2,'0')+':'+String(biliDt.getMinutes()).padStart(2,'0');
+              biliStatus.textContent='已登录(账号: '+(cfg.bili_uname||'(未知)')+', 时间: '+biliTs+')';
+              biliStatus.style.color='var(--state-success)';
+            }else{
+              biliStatus.textContent='未登录';
+              biliStatus.style.color='var(--apple-muted-foreground)';
+            }
+          }
+          // YouTube OAuth 登录状态显示
+          var ytStatus=credSection.querySelector('[data-dom-id="yt-login-status"]');
+          if(ytStatus){
+            if(cfg.yt_user_email){
+              ytStatus.textContent='已登录(email: '+cfg.yt_user_email+')';
+              ytStatus.style.color='var(--state-success)';
+            }else{
+              ytStatus.textContent='未登录';
+              ytStatus.style.color='var(--apple-muted-foreground)';
+            }
+          }
         }
         // AI 服务接口区块
         var aiSection=document.getElementById('section-ai-services');
@@ -1203,10 +1297,19 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
   // ===== 配置保存（账号凭证 / AI 服务接口） =====
   function setupSave(section, endpoint, successMsg){
-    var saveBtn=section.querySelectorAll('button');
     var save=null;
-    // 找到最后一个「保存」按钮
-    saveBtn.forEach(function(b){if(b.textContent.trim()==='保存')save=b;});
+    // 优先通过 data-dom-id 查找保存按钮(回退到文本匹配)
+    var credSection=document.getElementById('section-credentials');
+    var aiSection=document.getElementById('section-ai-services');
+    if(section===credSection){
+      save=credSection.querySelector('[data-dom-id="credentials-save-btn"]');
+    }else if(section===aiSection){
+      save=aiSection.querySelector('[data-dom-id="ai-save-btn"]');
+    }
+    if(!save){
+      // 回退:查找最后一个「保存」按钮
+      section.querySelectorAll('button').forEach(function(b){if(b.textContent.trim()==='保存')save=b;});
+    }
     if(!save)return;
     // 让所有 input 可编辑
     section.querySelectorAll('input[readonly],textarea[readonly]').forEach(function(inp){
@@ -1247,8 +1350,6 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       setBtnLoading(save,true,'保存中…');
       // 收集字段
       var body={};
-      var credSection=document.getElementById('section-credentials');
-      var aiSection=document.getElementById('section-ai-services');
       if(section===credSection){
         var credMap={};
         credSection.querySelectorAll('.flex.flex-col').forEach(function(div){
@@ -1258,10 +1359,10 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           if(!inp)return;
           var lblText=lbl.textContent.trim();
           var fieldMap={
-            '管理密码':'admin_password',
             'B站 SESSDATA':'bili_sessdata','B站 bili_jct':'bili_jct',
             'B站 buvid3':'bili_buvid3','B站 ac_time_value':'ac_time_value',
             'YouTube API Key':'yt_api_key','YouTube Cookie':'yt_cookies',
+            'YouTube OAuth Client ID':'yt_client_id','YouTube OAuth Client Secret':'yt_client_secret','YouTube OAuth Redirect URI':'yt_redirect_uri',
             'GitHub Token':'gh_token','GitHub 仓库':'gh_repo'
           };
           var key=fieldMap[lblText];
@@ -1288,7 +1389,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(body)
       })
-      .then(function(r){return r.json();})
+      .then(apiSafeJson)
       .then(function(d){
         setBtnLoading(save,false);
         if(d.error){
@@ -1314,13 +1415,19 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   var aiSaveCtx=setupSave(document.getElementById('section-ai-services'),'/api/config','AI 服务接口已保存');
 
   // ===== 测试按钮 =====
-  // 按字段 label 文本分发到对应测试端点;无对应端点的字段不绑定(按钮仅做 UI 占位)
+  // 按字段 label 文本分发到对应测试端点;无对应端点的字段改为 info 提示
   function bindTestButtons(){
     var credSection=document.getElementById('section-credentials');
     var aiSection=document.getElementById('section-ai-services');
 
-    // 账号凭证区:仅 B 站 5 个字段调 /api/test/bili;管理密码/YouTube/GitHub 无后端测试端点,改为提示
-    var biliFields=['B站 SESSDATA','B站 bili_jct','B站 buvid3','B站 ac_time_value'];
+    // 账号凭证区:
+    //   - B站 SESSDATA 调 /api/test/bili (后端只测 SESSDATA 有效性)
+    //   - B站 bili_jct / buvid3 / ac_time_value 改为 info 图标按钮(随 SESSDATA 一起校验)
+    //   - YouTube API Key 无独立测试端点 -> 提示
+    //   - GitHub Token 调 /api/test/github
+    var biliSessdataFields=['B站 SESSDATA'];
+    var biliInfoFields=['B站 bili_jct','B站 buvid3','B站 ac_time_value'];
+    var githubFields=['GitHub Token'];
     if(credSection){
       credSection.querySelectorAll('.flex.flex-col').forEach(function(div){
         var lbl=div.querySelector('label');
@@ -1330,7 +1437,8 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         // label 末尾可能有「获取方式」按钮文本,只取主文本
         var mainText=lblText.split('获取方式')[0].trim();
         var endpoint='';
-        if(biliFields.indexOf(mainText)>=0)endpoint='/api/test/bili';
+        if(biliSessdataFields.indexOf(mainText)>=0)endpoint='/api/test/bili';
+        else if(githubFields.indexOf(mainText)>=0)endpoint='/api/test/github';
         if(endpoint){
           btn.addEventListener('click',function(){
             setBtnLoading(btn,true,'测试中…');
@@ -1345,8 +1453,17 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
                 showToast('测试失败：'+(e.message||e),'error');
               });
           });
-        }else{
-          // 无对应测试端点的字段:点击提示用户
+        }else if(biliInfoFields.indexOf(mainText)>=0){
+          // B 站其他字段随 SESSDATA 一起校验,改为 info 图标按钮
+          btn.textContent='info';
+          btn.title='该字段随 SESSDATA 一起校验,无需单独测试';
+          btn.addEventListener('click',function(){
+            showToast('该字段随 SESSDATA 一起校验,无需单独测试','info');
+          });
+        }
+        // 其余字段(YouTube API Key 等)无独立端点:点击时提示用户
+        // (不再统一覆盖,仅在没有命中上面的分支时绑定提示)
+        else if(mainText.indexOf('YouTube API Key')>=0){
           btn.addEventListener('click',function(){
             showToast('该字段无独立测试端点,请保存后在实际运行中验证','info');
           });
@@ -1397,7 +1514,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         showSearchLoading(q);
         setBtnLoading(searchBtn,true,'搜索中…');
         fetch('/api/youtube/search?q='+encodeURIComponent(q),{credentials:'include'})
-          .then(function(r){return r.json();})
+          .then(apiSafeJson)
           .then(function(d){
             setBtnLoading(searchBtn,false);
             if(d.error){
@@ -1511,7 +1628,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
               headers:{'Content-Type':'application/json'},
               body:JSON.stringify({channel_id:channelId,name:name})
             })
-            .then(function(r){return r.json();})
+            .then(apiSafeJson)
             .then(function(d){
               setBtnLoading(followBtn,false);
               if(d.error){
@@ -1540,10 +1657,6 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       var clearBtn=wrap.querySelector('.search-clear-btn');
       if(clearBtn)clearBtn.onclick=function(){wrap.remove();};
     }
-    function escapeHtml(s){
-      if(!s)return '';
-      return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
-    }
 
     // 缓存已关注频道 channel_id 集合,供搜索结果标记已关注
     var followedChannelIds={};
@@ -1557,7 +1670,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     function ensureTids(cb){
       if(cachedTids){cb(cachedTids);return;}
       fetch('/api/tids',{credentials:'include'})
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){cachedTids=Array.isArray(d)?d:[];cb(cachedTids);})
         .catch(function(){cachedTids=[];cb([]);});
     }
@@ -1568,7 +1681,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       if(seasonsLoading){setTimeout(function(){ensureSeasons(cb);},200);return;}
       seasonsLoading=true;
       fetch('/api/seasons',{credentials:'include'})
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){
           if(d && d.error){cachedSeasons=[];}
           else{
@@ -1592,7 +1705,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       if(!list)return;
       list.innerHTML='<div class="rounded-lg px-4 py-8 text-center" style="background:var(--apple-background);border:1px solid var(--apple-border)"><p class="text-sm" style="color:var(--apple-muted-foreground)">加载中…</p></div>';
       fetch('/api/channels',{credentials:'include'})
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){
           var items=Array.isArray(d)?d:(d&&d.channels)||[];
           followedChannelIds={};
@@ -1728,7 +1841,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload)
       })
-      .then(function(r){return r.json();})
+      .then(apiSafeJson)
       .then(function(d){
         if(btn)setBtnLoading(btn,false);
         return d;
@@ -1751,7 +1864,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             okText:'删除',
             onOk:function(){
               fetch('/api/channels/'+encodeURIComponent(id),{method:'DELETE',credentials:'include'})
-                .then(function(r){return r.json();})
+                .then(apiSafeJson)
                 .then(function(d){
                   if(d.error){showToast(d.error,'error');}
                   else{showToast('已删除','success');loadChannels();}
@@ -1775,7 +1888,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             headers:{'Content-Type':'application/json'},
             body:JSON.stringify({enabled:newVal})
           })
-          .then(function(r){return r.json();})
+          .then(apiSafeJson)
           .then(function(d){
             if(d.error){showToast(d.error,'error');return;}
             toggle.setAttribute('data-enabled',newVal?'1':'0');
@@ -1803,10 +1916,12 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     loadChannels();
 
     // 「保存频道配置」按钮:批量保存所有卡片
-    var saveChannelBtn=null;
-    channelsSection.querySelectorAll('button').forEach(function(b){
-      if(b.textContent.trim()==='保存频道配置')saveChannelBtn=b;
-    });
+    var saveChannelBtn=channelsSection.querySelector('[data-dom-id="channels-save-btn"]');
+    if(!saveChannelBtn){
+      channelsSection.querySelectorAll('button').forEach(function(b){
+        if(b.textContent.trim()==='保存频道配置')saveChannelBtn=b;
+      });
+    }
     if(saveChannelBtn){
       saveChannelBtn.addEventListener('click',function(){
         var cards=channelsSection.querySelectorAll('.channel-card');
@@ -1831,15 +1946,17 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   // ===== 运行状态 =====
   var statusSection=document.getElementById('section-status');
   if(statusSection){
-    var execBtn=null;
-    statusSection.querySelectorAll('button').forEach(function(b){
-      if(b.textContent.trim()==='立即执行')execBtn=b;
-    });
+    var execBtn=statusSection.querySelector('[data-dom-id="trigger-btn"]');
+    if(!execBtn){
+      statusSection.querySelectorAll('button').forEach(function(b){
+        if(b.textContent.trim()==='立即执行')execBtn=b;
+      });
+    }
     if(execBtn){
       execBtn.addEventListener('click',function(){
         setBtnLoading(execBtn,true,'触发中…');
         fetch('/api/trigger',{method:'POST',credentials:'include'})
-          .then(function(r){return r.json();})
+          .then(apiSafeJson)
           .then(function(d){
             setBtnLoading(execBtn,false);
             if(d.error){
@@ -1859,7 +1976,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     // 加载状态
     function loadStatus(){
       fetch('/api/status',{credentials:'include'})
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){
           // 更新统计卡片
           var stats=statusSection.querySelectorAll('.grid.grid-cols-3 > div');
@@ -1953,7 +2070,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       var tbody=document.getElementById('processed-tbody');
       if(!tbody)return;
       fetch('/api/processed',{credentials:'include'})
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){
           var items=d.items||[];
           if(items.length===0){
@@ -1989,7 +2106,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
               okText:'删除',
               onOk:function(){
                 fetch('/api/processed/'+encodeURIComponent(videoId),{method:'DELETE',credentials:'include'})
-                  .then(function(r){return r.json();})
+                  .then(apiSafeJson)
                   .then(function(d){
                     if(d.error){
                       showToast(d.error,'error');
@@ -2056,7 +2173,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({notify_webhook:url})
         })
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){
           setBtnLoading(notifySaveBtn,false);
           if(d.error)showToast(d.error,'error');
@@ -2074,24 +2191,32 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   var manualSection=document.getElementById('section-manual');
   if(manualSection){
     var textarea=manualSection.querySelector('textarea');
-    var addBtn=null;
-    manualSection.querySelectorAll('button').forEach(function(b){
-      if(b.textContent.trim()==='添加到队列')addBtn=b;
-    });
+    var addBtn=manualSection.querySelector('[data-dom-id="manual-add-btn"]');
+    if(!addBtn){
+      manualSection.querySelectorAll('button').forEach(function(b){
+        if(b.textContent.trim()==='添加到队列')addBtn=b;
+      });
+    }
+    var manualChannelSelect=manualSection.querySelector('[data-dom-id="manual-channel-select"]');
     var queueList=document.getElementById('manual-queue-list');
     if(textarea && addBtn){
       addBtn.addEventListener('click',function(){
         var text=textarea.value.trim();
         if(!text){showToast('请输入视频 URL','error');return;}
         var urls=text.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+        var body={urls:urls};
+        // 包含所选频道 ID(若 select 有值)
+        if(manualChannelSelect && manualChannelSelect.value){
+          body.channel_config_id=manualChannelSelect.value;
+        }
         setBtnLoading(addBtn,true,'添加中…');
         fetch('/api/manual-queue',{
           method:'POST',
           credentials:'include',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({urls:urls})
+          body:JSON.stringify(body)
         })
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){
           setBtnLoading(addBtn,false);
           if(d.error){
@@ -2108,10 +2233,33 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         });
       });
     }
+    // 加载「不指定频道」select 的频道选项
+    function loadManualChannelOptions(){
+      if(!manualChannelSelect)return;
+      fetch('/api/channels',{credentials:'include'})
+        .then(apiSafeJson)
+        .then(function(d){
+          var items=Array.isArray(d)?d:(d&&d.channels)||[];
+          // 保留空选项「不指定频道」,清空其余
+          var currentVal=manualChannelSelect.value;
+          manualChannelSelect.innerHTML='<option value="">不指定频道</option>';
+          items.forEach(function(ch){
+            var opt=document.createElement('option');
+            opt.value=ch.id||ch.channel_id;
+            opt.textContent=ch.name||ch.channel_id;
+            manualChannelSelect.appendChild(opt);
+          });
+          if(currentVal)manualChannelSelect.value=currentVal;
+        })
+        .catch(function(e){
+          console.warn('[loadManualChannelOptions]',e);
+        });
+    }
+    loadManualChannelOptions();
     function loadManualQueue(){
       if(!queueList)return;
       fetch('/api/manual-queue',{credentials:'include'})
-        .then(function(r){return r.json();})
+        .then(apiSafeJson)
         .then(function(d){
           queueList.innerHTML='';
           var items=d.items||[];
@@ -2138,7 +2286,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
                 body:'确认从队列删除「'+(item.title||item.video_id)+'」？',
                 onOk:function(){
                   fetch('/api/manual-queue/'+encodeURIComponent(item.video_id),{method:'DELETE',credentials:'include'})
-                    .then(function(r){return r.json();})
+                    .then(apiSafeJson)
                     .then(function(d){
                       if(d.error){
                         showToast(d.error,'error');
@@ -2164,6 +2312,249 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     if(s===null||s===undefined)return '';
     return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
   }
+
+  // ===== B 站扫码登录 =====
+  function openBiliQrcodeLogin(){
+    var pollTimer=null;
+    var countdownTimer=null;
+    var qrcodeKey=null;
+    // 1. 获取二维码
+    fetch('/api/bili/login/qrcode',{credentials:'include'})
+      .then(apiSafeJson)
+      .then(function(d){
+        if(d.error){showToast(d.error,'error');return;}
+        qrcodeKey=d.qrcode_key;
+        var expiresAt=d.expires_at;
+        // 2. 弹出 modal 显示二维码 + 倒计时 + 刷新按钮
+        var overlay=document.createElement('div');
+        overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;animation:modal-fade .18s ease';
+        var dialog=document.createElement('div');
+        dialog.style.cssText='background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;max-width:360px;width:100%;box-shadow:var(--shadow-2xl);text-align:center';
+        var title=document.createElement('h3');
+        title.style.cssText='font-size:16px;font-weight:600;margin:0 0 12px';
+        title.textContent='扫码登录 B 站';
+        var img=document.createElement('img');
+        img.src=d.qrcode_url;
+        img.style.cssText='width:220px;height:220px;border-radius:8px;border:1px solid var(--apple-border);display:block;margin:0 auto';
+        var statusP=document.createElement('p');
+        statusP.style.cssText='font-size:13px;margin:12px 0 4px;color:var(--apple-muted-foreground)';
+        statusP.textContent='请使用 B 站 App 扫描二维码';
+        var countdownP=document.createElement('p');
+        countdownP.style.cssText='font-size:12px;margin:4px 0;color:var(--apple-muted-foreground);font-family:var(--font-mono)';
+        var refreshBtn=document.createElement('button');
+        refreshBtn.textContent='刷新二维码';
+        refreshBtn.style.cssText='height:36px;padding:0 16px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:13px;display:none';
+        var closeBtn=document.createElement('button');
+        closeBtn.textContent='关闭';
+        closeBtn.style.cssText='height:36px;padding:0 16px;border-radius:8px;border:none;background:var(--brand-500);color:var(--background-50);cursor:pointer;font-size:13px;margin-left:8px';
+        var btnRow=document.createElement('div');
+        btnRow.style.cssText='display:flex;justify-content:center;gap:8px;margin-top:12px';
+        btnRow.appendChild(refreshBtn);
+        btnRow.appendChild(closeBtn);
+        dialog.appendChild(title);
+        dialog.appendChild(img);
+        dialog.appendChild(statusP);
+        dialog.appendChild(countdownP);
+        dialog.appendChild(btnRow);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        function cleanup(){
+          if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+          if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+          if(overlay.parentNode)overlay.parentNode.removeChild(overlay);
+        }
+        function updateCountdown(){
+          var now=Math.floor(Date.now()/1000);
+          var remaining=expiresAt-now;
+          if(remaining<=0){
+            countdownP.textContent='二维码已过期';
+            statusP.textContent='二维码已过期,请刷新';
+            statusP.style.color='var(--state-error)';
+            refreshBtn.style.display='';
+            if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+            if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+          }else{
+            var mm=Math.floor(remaining/60);
+            var ss=remaining%60;
+            countdownP.textContent='剩余 '+mm+':'+String(ss).padStart(2,'0');
+          }
+        }
+        updateCountdown();
+        countdownTimer=setInterval(updateCountdown,1000);
+        function startPolling(){
+          if(pollTimer)clearInterval(pollTimer);
+          pollTimer=setInterval(function(){
+            fetch('/api/bili/login/qrcode/status?qrcode_key='+encodeURIComponent(qrcodeKey),{credentials:'include'})
+              .then(apiSafeJson)
+              .then(function(st){
+                if(st.status==='success'){
+                  cleanup();
+                  showToast('登录成功,账号: '+(st.uname||'(未知)'),'success');
+                  // 刷新表单字段(B站 4 字段填充脱敏值)
+                  loadConfigToForm();
+                  // 自动调 /api/seasons 缓存合集列表(获取后丢弃,触发后端缓存)
+                  fetch('/api/seasons',{credentials:'include'}).then(apiSafeJson).then(function(){/* discard */}).catch(function(){});
+                  // 调 /api/test/bili 验证凭证
+                  fetch('/api/test/bili',{method:'POST',credentials:'include'})
+                    .then(apiSafeJson)
+                    .then(function(t){if(t && t.success)showToast('B 站凭证验证: '+(t.message||'有效'),'success');})
+                    .catch(function(){});
+                }else if(st.status==='expired'){
+                  statusP.textContent='二维码已过期,请刷新';
+                  statusP.style.color='var(--state-error)';
+                  countdownP.textContent='二维码已过期';
+                  refreshBtn.style.display='';
+                  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+                }else if(st.status==='scanned'){
+                  statusP.textContent='已扫码,请在手机上确认';
+                  statusP.style.color='var(--brand-500)';
+                }else if(st.status==='waiting'){
+                  statusP.textContent='请使用 B 站 App 扫描二维码';
+                }
+              })
+              .catch(function(){});
+          },2000);
+        }
+        startPolling();
+        closeBtn.onclick=cleanup;
+        overlay.onclick=function(e){if(e.target===overlay)cleanup();};
+        document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){cleanup();document.removeEventListener('keydown',esc);}},{once:true});
+        refreshBtn.onclick=function(){cleanup();openBiliQrcodeLogin();};
+      })
+      .catch(function(e){
+        showToast('获取二维码失败:'+(e.message||e),'error');
+      });
+  }
+
+  // ===== YouTube OAuth 登录 =====
+  function openYtOAuthLogin(){
+    var popup=window.open('/api/youtube/oauth/start','yt-oauth','width=600,height=700');
+    if(!popup){
+      showToast('弹窗被浏览器拦截,请允许弹窗后重试','error');
+      return;
+    }
+    function handler(e){
+      if(!e.data||e.data.type!=='yt-oauth-result')return;
+      window.removeEventListener('message',handler);
+      if(e.data.success){
+        if(e.data.partial){
+          // Cookie 铸造失败,OAuth 本身成功
+          showToast('YouTube OAuth 成功但 Cookie 铸造失败,如需下载会员视频请手动补 yt_cookies','error');
+        }else{
+          showToast('YouTube 登录成功: '+(e.data.email||''),'success');
+        }
+        // 刷新表单(yt_cookies 脱敏值 + yt_user_email)
+        loadConfigToForm();
+      }else{
+        showToast(e.data.error||'YouTube 登录失败','error');
+      }
+      try{popup.close();}catch(err){}
+    }
+    window.addEventListener('message',handler);
+  }
+
+  // ===== 修改管理密码 =====
+  function openChangePasswordModal(){
+    var overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;animation:modal-fade .18s ease';
+    var dialog=document.createElement('div');
+    dialog.style.cssText='background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;max-width:360px;width:100%;box-shadow:var(--shadow-2xl)';
+    var title=document.createElement('h3');
+    title.style.cssText='font-size:16px;font-weight:600;margin:0 0 16px';
+    title.textContent='修改管理密码';
+    function makeField(labelText,placeholder){
+      var wrap=document.createElement('div');
+      wrap.style.cssText='margin-bottom:12px';
+      var lbl=document.createElement('label');
+      lbl.style.cssText='display:block;font-size:12px;font-weight:500;margin-bottom:4px;color:var(--apple-muted-foreground)';
+      lbl.textContent=labelText;
+      var inp=document.createElement('input');
+      inp.type='password';
+      inp.placeholder=placeholder||'';
+      inp.style.cssText='width:100%;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--apple-input);background:var(--apple-background);color:var(--apple-foreground);font-size:14px;box-sizing:border-box';
+      wrap.appendChild(lbl);
+      wrap.appendChild(inp);
+      return {wrap:wrap,input:inp};
+    }
+    var oldPwd=makeField('旧密码','输入当前密码');
+    var newPwd=makeField('新密码','至少 8 位新密码');
+    var confirmPwd=makeField('确认新密码','再次输入新密码');
+    var btnRow=document.createElement('div');
+    btnRow.style.cssText='display:flex;justify-content:flex-end;gap:8px;margin-top:8px';
+    var cancelBtn=document.createElement('button');
+    cancelBtn.textContent='取消';
+    cancelBtn.style.cssText='height:36px;padding:0 16px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:13px';
+    var submitBtn=document.createElement('button');
+    submitBtn.textContent='提交';
+    submitBtn.style.cssText='height:36px;padding:0 16px;border-radius:8px;border:none;background:var(--brand-500);color:var(--background-50);cursor:pointer;font-size:13px;font-weight:500';
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(submitBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(oldPwd.wrap);
+    dialog.appendChild(newPwd.wrap);
+    dialog.appendChild(confirmPwd.wrap);
+    dialog.appendChild(btnRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    function close(){if(overlay.parentNode)overlay.parentNode.removeChild(overlay);}
+    cancelBtn.onclick=close;
+    overlay.onclick=function(e){if(e.target===overlay)close();};
+    document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',esc);}},{once:true});
+    submitBtn.onclick=function(){
+      var op=oldPwd.input.value;
+      var np=newPwd.input.value;
+      var cp=confirmPwd.input.value;
+      if(!op){showToast('请输入旧密码','error');return;}
+      if(!np||np.length<8){showToast('新密码至少 8 位','error');return;}
+      if(np!==cp){showToast('两次输入的新密码不一致','error');return;}
+      setBtnLoading(submitBtn,true,'提交中…');
+      fetch('/api/auth/change-password',{
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({old_password:op,new_password:np})
+      })
+      .then(apiSafeJson)
+      .then(function(d){
+        setBtnLoading(submitBtn,false);
+        if(d.error){
+          showToast(d.error,'error');
+        }else{
+          showToast('密码已修改','success');
+          close();
+        }
+      })
+      .catch(function(e){
+        setBtnLoading(submitBtn,false);
+        showToast('修改失败:'+(e.message||e),'error');
+      });
+    };
+  }
+
+  // ===== 绑定 OAuth/QR/修改密码 按钮事件 =====
+  (function(){
+    var biliQrBtn=document.querySelector('[data-dom-id="bili-qrcode-login"]');
+    if(biliQrBtn)biliQrBtn.addEventListener('click',openBiliQrcodeLogin);
+    var ytOAuthBtn=document.querySelector('[data-dom-id="yt-oauth-login"]');
+    if(ytOAuthBtn)ytOAuthBtn.addEventListener('click',openYtOAuthLogin);
+    var changePwdBtn=document.querySelector('[data-dom-id="change-password-btn"]');
+    if(changePwdBtn)changePwdBtn.addEventListener('click',openChangePasswordModal);
+    // OAuth 配置展开/收起
+    var ytOAuthToggle=document.querySelector('[data-dom-id="yt-oauth-config-toggle"]');
+    var ytOAuthWrap=document.querySelector('[data-dom-id="yt-oauth-config-wrap"]');
+    if(ytOAuthToggle && ytOAuthWrap){
+      ytOAuthToggle.addEventListener('click',function(){
+        var isOpen=ytOAuthWrap.style.display!=='none';
+        if(isOpen){
+          ytOAuthWrap.style.display='none';
+          ytOAuthToggle.textContent='OAuth 配置 ▾';
+        }else{
+          ytOAuthWrap.style.display='';
+          ytOAuthToggle.textContent='OAuth 配置 ▴';
+        }
+      });
+    }
+  })();
 
   // 初始化图标
   if(window.lucide)try{lucide.createIcons();}catch(e){}
