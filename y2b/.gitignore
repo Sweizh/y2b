@@ -1,8 +1,0 @@
-node_modules/
-.wrangler/
-.dev.vars
-dist/
-*.log
-.DS_Store
-y2b_blog.html
-y2b_blog.txt
