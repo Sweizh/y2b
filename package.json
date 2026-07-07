@@ -12,6 +12,7 @@
     "tail": "wrangler tail"
   },
   "dependencies": {
+    "@cloudflare/kv-asset-handler": "^0.3.0",
     "bcryptjs": "^2.4.3",
     "hono": "^4.6.14"
   },

@@ -5,9 +5,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
+import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
+import manifestJSON from '__STATIC_CONTENT_MANIFEST';
 import { getRawConfig } from './kv';
 import { getSessionFromRequest } from './auth';
-
 import authRoutes from './routes/auth';
 import configRoutes from './routes/config';
 import channelRoutes from './routes/channels';
@@ -18,6 +19,10 @@ import processedRoutes from './routes/processed';
 import manualRoutes from './routes/manual';
 import testRoutes from './routes/tests';
 import pipelineRoutes from './routes/pipeline';
+
+// 静态资源 manifest:文件名 → 哈希文件名映射
+// 例: { "index.html": "index.375bd5c05f.html" }
+const assetManifest = JSON.parse(manifestJSON);
 
 type AppVars = {
   requestId: string;
@@ -111,27 +116,34 @@ app.route('/api/test', testRoutes);     // /api/test/asr /api/test/translate /ap
 app.route('/api/pipeline', pipelineRoutes);
 
 // 静态资源服务（前端 HTML）
-// 通过 [site] 配置从 __STATIC_CONTENT KV 读取
-async function serveStatic(c: any, path: string, contentType: string) {
-  const key = path === '/' ? 'index.html' : path.replace(/^\//, '');
-  // 兼容 [site] bucket 中带或不带前缀斜杠
-  const value = await c.env.__STATIC_CONTENT.get(key, 'arrayBuffer');
-  if (!value) {
+// 用 @cloudflare/kv-asset-handler 的 getAssetFromKV 读取
+// 它会通过 manifest 自动映射哈希文件名（如 index.html → index.375bd5c05f.html）
+async function serveStatic(c: any, path: string) {
+  try {
+    // 构造请求 URL,让 getAssetFromKV 根据 path 查找资源
+    const url = new URL(c.req.url);
+    url.pathname = path === '/' ? '/index.html' : path;
+    const modifiedRequest = new Request(url.toString(), c.req.raw);
+    return await getAssetFromKV(
+      {
+        request: modifiedRequest,
+        waitUntil: (p: Promise<unknown>) => c.executionCtx.waitUntil(p),
+      },
+      {
+        ASSET_NAMESPACE: c.env.__STATIC_CONTENT,
+        ASSET_MANIFEST: assetManifest,
+      }
+    );
+  } catch (e) {
     return c.notFound();
   }
-  return new Response(value, {
-    headers: {
-      'Content-Type': contentType + '; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600',
-    },
-  });
 }
 
-app.get('/', (c) => serveStatic(c, '/', 'text/html'));
-app.get('/index.html', (c) => serveStatic(c, 'index.html', 'text/html'));
+app.get('/', (c) => serveStatic(c, '/'));
+app.get('/index.html', (c) => serveStatic(c, '/index.html'));
 // 中文字符串 URL 编码后的路径
-app.get('/登录.html', (c) => serveStatic(c, '登录.html', 'text/html'));
-app.get('/控制台.html', (c) => serveStatic(c, '控制台.html', 'text/html'));
+app.get('/登录.html', (c) => serveStatic(c, '/登录.html'));
+app.get('/控制台.html', (c) => serveStatic(c, '/控制台.html'));
 
 // 404 兜底
 app.notFound((c) => {
@@ -139,8 +151,8 @@ app.notFound((c) => {
   if (path.startsWith('/api/')) {
     return c.json({ error: 'Not Found' }, 404);
   }
-  // 非 API 路径尝试重定向到首页
-  return c.redirect('/');
+  // 非_api 路径返回 404 页面,避免重定向循环
+  return c.json({ error: 'Not Found', path }, 404);
 });
 
 // 全局错误处理
