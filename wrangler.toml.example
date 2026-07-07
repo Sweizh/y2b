@@ -1,6 +1,8 @@
 name = "y2b"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+# 启用 workers.dev 子域(默认 true,但某些账号默认禁用,显式启用确保可访问)
+workers_dev = true
 
 # 静态资源目录：部署时通过 [site] 配置打包进 Worker
 # 参考 https://developers.cloudflare.com/workers/static-assets/
