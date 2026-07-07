@@ -521,7 +521,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         <div class="flex flex-wrap items-center gap-3 mb-5 pb-4" style="border-bottom:1px solid var(--apple-border)">
           <button data-dom-id="change-password-btn" class="h-9 px-4 rounded-lg text-xs font-medium transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">修改密码</button>
           <div class="flex items-center gap-2">
-            <button data-dom-id="bili-qrcode-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">扫码登录 B 站</button>
+            <button data-dom-id="bili-qrcode-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">弹窗登录 B 站</button>
             <span data-dom-id="bili-login-status" class="text-xs" style="color:var(--apple-muted-foreground)">未登录</span>
           </div>
         </div>
@@ -2426,6 +2426,121 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       });
   }
 
+  // ===== B 站弹窗登录(用户侧浏览器登录 + postMessage 回传 cookie) =====
+  // 为什么用这个方案: B 站 passport 端点对 Cloudflare Worker IP 严格风控,
+  // Worker 代理 QR 登录会被 ban(code -412),只能让用户浏览器直接登录 B 站
+  function openBiliPopupLogin(){
+    var popup=window.open('https://passport.bilibili.com/login','bili-login-popup','width=1024,height=700');
+    if(!popup){
+      showToast('弹窗被浏览器拦截,请允许弹窗后重试','error');
+      return;
+    }
+    // 用户需在 B 站页面控制台粘贴的代码片段(读取 document.cookie 并 postMessage 回主窗口)
+    var snippet="window.opener.postMessage({type:'bili-cookie-result',success:true,cookie:document.cookie,origin:location.origin},'*');alert('Cookie 已发送回控制台,可关闭此窗口');";
+    var overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;animation:modal-fade .18s ease';
+    var dialog=document.createElement('div');
+    dialog.style.cssText='background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;max-width:440px;width:100%;box-shadow:var(--shadow-2xl)';
+    var title=document.createElement('h3');
+    title.style.cssText='font-size:16px;font-weight:600;margin:0 0 12px';
+    title.textContent='弹窗登录 B 站';
+    var steps=document.createElement('ol');
+    steps.style.cssText='font-size:13px;line-height:1.6;margin:0 0 12px;padding-left:20px;color:var(--apple-foreground)';
+    steps.innerHTML='<li>在刚弹出的窗口中正常登录 B 站(账号密码/扫码均可)</li>'+
+      '<li>登录成功看到 B 站首页后,在该页面按 <kbd>F12</kbd> 打开开发者工具</li>'+
+      '<li>切到 <kbd>Console</kbd> 标签,粘贴下方代码并回车</li>';
+    var codeBox=document.createElement('textarea');
+    codeBox.readOnly=true;
+    codeBox.value=snippet;
+    codeBox.style.cssText='width:100%;height:60px;font-family:var(--font-mono);font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--apple-border);background:var(--apple-muted);color:var(--apple-foreground);resize:none;margin-bottom:8px';
+    codeBox.onclick=function(){codeBox.select();document.execCommand('copy');showToast('代码已复制','success');};
+    var copyBtn=document.createElement('button');
+    copyBtn.textContent='复制代码';
+    copyBtn.style.cssText='height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:12px;margin-right:8px';
+    copyBtn.onclick=function(){
+      try{
+        navigator.clipboard.writeText(snippet).then(function(){showToast('代码已复制,请粘贴到 B 站页面 Console','success');},function(){codeBox.select();document.execCommand('copy');showToast('代码已复制','success');});
+      }catch(e){codeBox.select();document.execCommand('copy');showToast('代码已复制','success');}
+    };
+    var reopenBtn=document.createElement('button');
+    reopenBtn.textContent='重开登录窗';
+    reopenBtn.style.cssText='height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:12px';
+    reopenBtn.onclick=function(){
+      try{popup.close();}catch(e){}
+      popup=window.open('https://passport.bilibili.com/login','bili-login-popup','width=1024,height=700');
+    };
+    var statusP=document.createElement('p');
+    statusP.style.cssText='font-size:13px;margin:12px 0 4px;color:var(--apple-muted-foreground)';
+    statusP.textContent='等待 cookie...';
+    var closeBtn=document.createElement('button');
+    closeBtn.textContent='取消';
+    closeBtn.style.cssText='height:36px;padding:0 16px;border-radius:8px;border:none;background:var(--brand-500);color:var(--background-50);cursor:pointer;font-size:13px;margin-top:8px;float:right';
+    var btnRow=document.createElement('div');
+    btnRow.style.cssText='display:flex;gap:8px;align-items:center';
+    btnRow.appendChild(copyBtn);
+    btnRow.appendChild(reopenBtn);
+    var tip=document.createElement('p');
+    tip.style.cssText='font-size:11px;margin:8px 0 0;color:var(--apple-muted-foreground);line-height:1.5';
+    tip.innerHTML='提示: B 站封禁了 Worker 服务器 IP,只能由你的浏览器登录后回传 cookie。cookie 仅含 SESSDATA/bili_jct/buvid3,加密存储于 KV。';
+    dialog.appendChild(title);
+    dialog.appendChild(steps);
+    dialog.appendChild(codeBox);
+    dialog.appendChild(btnRow);
+    dialog.appendChild(statusP);
+    dialog.appendChild(tip);
+    dialog.appendChild(closeBtn);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    function cleanup(){
+      window.removeEventListener('message',handler);
+      if(overlay.parentNode)overlay.parentNode.removeChild(overlay);
+      try{if(popup&&!popup.closed){}}catch(e){}
+    }
+    function handler(e){
+      var d=e.data;
+      if(!d||d.type!=='bili-cookie-result')return;
+      if(!d.success||!d.cookie){
+        statusP.textContent=d.error||('未收到 cookie');
+        statusP.style.color='var(--state-error)';
+        return;
+      }
+      window.removeEventListener('message',handler);
+      statusP.textContent='收到 cookie,正在保存...';
+      statusP.style.color='var(--brand-500)';
+      fetch('/api/bili/login/cookie',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify({cookie:d.cookie})
+      })
+        .then(apiSafeJson)
+        .then(function(r){
+          if(r.success){
+            cleanup();
+            try{popup.close();}catch(err){}
+            showToast(r.message||('B 站登录成功:'+(r.uname||'')),'success');
+            loadConfigToForm();
+            // 调 /api/test/bili 进一步验证(可选)
+            fetch('/api/test/bili',{method:'POST',credentials:'include'})
+              .then(apiSafeJson)
+              .then(function(t){if(t&&t.success)showToast('B 站凭证验证: '+(t.message||'有效'),'success');else if(t)showToast('凭证验证: '+(t.message||'未通过'),'warning');})
+              .catch(function(){});
+          }else{
+            statusP.textContent=r.error||'保存失败';
+            statusP.style.color='var(--state-error)';
+          }
+        })
+        .catch(function(e){
+          statusP.textContent='保存失败:'+(e.message||e);
+          statusP.style.color='var(--state-error)';
+        });
+    }
+    window.addEventListener('message',handler);
+    closeBtn.onclick=cleanup;
+    overlay.onclick=function(e){if(e.target===overlay)cleanup();};
+    document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){cleanup();document.removeEventListener('keydown',esc);}},{once:true});
+  }
+
   // ===== YouTube OAuth 登录 =====
   function openYtOAuthLogin(){
     var popup=window.open('/api/youtube/oauth/start','yt-oauth','width=600,height=700');
@@ -2534,7 +2649,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   // ===== 绑定 OAuth/QR/修改密码 按钮事件 =====
   (function(){
     var biliQrBtn=document.querySelector('[data-dom-id="bili-qrcode-login"]');
-    if(biliQrBtn)biliQrBtn.addEventListener('click',openBiliQrcodeLogin);
+    if(biliQrBtn)biliQrBtn.addEventListener('click',openBiliPopupLogin);
     var ytOAuthBtn=document.querySelector('[data-dom-id="yt-oauth-login"]');
     if(ytOAuthBtn)ytOAuthBtn.addEventListener('click',openYtOAuthLogin);
     var changePwdBtn=document.querySelector('[data-dom-id="change-password-btn"]');

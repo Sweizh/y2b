@@ -193,6 +193,110 @@ app.post('/logout', async (c) => {
   return c.json({ success: true });
 });
 
+// 用户侧浏览器弹窗登录后提交 cookie(绕过 Worker IP 风控的唯一可行方案)
+// 流程:
+//   1. 前端弹窗打开 https://passport.bilibili.com/login,用户在浏览器中正常登录
+//   2. 登录成功后,用户在 B 站页面按 F12 → Console,粘贴一行 JS:
+//      window.opener.postMessage({type:'bili-cookie-result',success:true,cookie:document.cookie},'*')
+//   3. 主窗口收到 message 后 POST cookie 字符串到本端点
+//   4. 后端解析 SESSDATA/bili_jct/buvid3,调 nav 接口验证(失败不阻断),加密存 KV
+//
+// 为什么不用 Worker 代理 B 站 QR 登录: passport.bilibili.com 对 Cloudflare Worker IP 严格风控,
+// 即使带 buvid3 也返回 {"code":-412,"message":"request was banned"}
+app.post('/cookie', async (c) => {
+  const requestId = getRequestId(c);
+  const start = Date.now();
+  try {
+    const body = await c.req.json().catch(() => ({})) as { cookie?: string };
+    const cookieStr = (body?.cookie || '').trim();
+    if (!cookieStr) {
+      return c.json({ error: 'cookie 不能为空' }, 400);
+    }
+    const cookies = parseCookieString(cookieStr);
+    const sessdata = cookies['SESSDATA'] || '';
+    const biliJct = cookies['bili_jct'] || '';
+    const buvid3FromCookie = cookies['buvid3'] || '';
+    if (!sessdata || !biliJct) {
+      return c.json({ error: 'cookie 中缺少 SESSDATA 或 bili_jct,请确认已在 bilibili.com 登录后再提取 cookie' }, 400);
+    }
+    // buvid3: 优先用用户提交的;若没有则从 finger/spi 获取或本地生成兜底
+    let finalBuvid3 = buvid3FromCookie;
+    if (!finalBuvid3) {
+      const { buvid3: fallback, source } = await getBuvid3(requestId);
+      finalBuvid3 = fallback;
+      log('bili_cookie_buvid3', 'fallback', { requestId, source });
+    }
+    // 调 nav 接口验证 cookie + 取 uname
+    // 注意: nav 接口(api.bilibili.com)可能也被风控,验证失败不阻断流程
+    // 实际有效性由 Runner 在 GitHub Actions 中调上传接口时验证
+    let uname = '';
+    let navVerified = false;
+    try {
+      const navResp = await fetch(BILI_NAV_URL, {
+        headers: {
+          'Cookie': `SESSDATA=${sessdata}; bili_jct=${biliJct}; buvid3=${finalBuvid3}`,
+          'User-Agent': UA,
+        },
+      });
+      const ct = navResp.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const navData = await navResp.json() as any;
+        if (navData.code === 0 && navData.data?.isLogin) {
+          uname = navData.data.uname || '';
+          navVerified = true;
+        } else {
+          log('bili_cookie_nav', 'warning', { requestId, code: navData.code, message: navData.message });
+        }
+      } else {
+        log('bili_cookie_nav', 'warning', { requestId, status: navResp.status, contentType: ct });
+      }
+    } catch (e: any) {
+      log('bili_cookie_nav', 'error', { requestId, error: e.message });
+    }
+    // 解码 SESSDATA 取 exp(用于 Runner 判断 cookie 是否临近过期)
+    let acTimeValue = '0';
+    try {
+      acTimeValue = String(decodeSessdataExp(sessdata) || 0);
+    } catch (e) {
+      log('bili_sessdata_decode', 'warning', { requestId, error: (e as Error).message });
+    }
+    // 加密写入 KV
+    const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
+    await putConfig(c.env.YT2BILI_KV, {
+      ...cfg,
+      bili_sessdata: sessdata,
+      bili_jct: biliJct,
+      bili_buvid3: finalBuvid3,
+      ac_time_value: acTimeValue,
+      bili_login_at: Date.now(),
+      bili_uname: uname,
+    }, c.env.ENCRYPTION_KEY || '');
+    log('bili_cookie_login', 'success', { requestId, uname, navVerified, duration: Date.now() - start });
+    return c.json({
+      success: true,
+      uname,
+      nav_verified: navVerified,
+      message: navVerified ? `登录成功,账号: ${uname}` : 'Cookie 已保存(nav 接口未能验证,实际有效性将在 Runner 运行时确认)',
+    });
+  } catch (e: any) {
+    log('bili_cookie_login', 'error', { requestId, error: e.message });
+    return c.json({ error: e.message || String(e) }, 500);
+  }
+});
+
+// 解析 cookie 字符串(形如 "SESSDATA=xxx; bili_jct=xxx; buvid3=xxx; ...")
+function parseCookieString(s: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  s.split(';').forEach(pair => {
+    const idx = pair.indexOf('=');
+    if (idx > 0) {
+      const name = pair.slice(0, idx).trim();
+      result[name] = pair.slice(idx + 1).trim();
+    }
+  });
+  return result;
+}
+
 // 解析 B 站登录成功后的 cookie
 // crossDomainUrl 形如:
 //   https://passport.biligame.com/x/passport-login/web/crossDomain?DedeUserID=xxx&SESSDATA=xxx&bili_jct=xxx&...
