@@ -68,7 +68,10 @@ app.get('/qrcode', async (c) => {
     const data = await resp.json() as any;
     if (data.code !== 0) {
       log('bili_qrcode', 'failed', { requestId, code: data.code, message: data.message });
-      return c.json({ error: data.message || '获取二维码失败' }, 502);
+      // 诊断信息:帮助排查 "request was banned"
+      const buvid3Preview = buvid3.slice(0, 20);
+      const buvid3HasInfoc = buvid3.includes('infoc') ? 'yes' : 'no';
+      return c.json({ error: data.message || '获取二维码失败', debug: { buvid3_preview: buvid3Preview, has_infoc: buvid3HasInfoc, bili_code: data.code } }, 502);
     }
     // data.data: { url, qrcode_key, webUrl(可选) }
     const d = data.data || {};
