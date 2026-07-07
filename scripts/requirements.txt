@@ -1,3 +1,4 @@
 bilibili-api-python==16.2.0
 yt-dlp==2024.12.6
-requests==2.32.3
+# bilibili-api-python 16.2.0 要求 requests~=2.31.0,不能锁死 2.32.3 否则依赖冲突
+requests>=2.31.0,<2.32.0
