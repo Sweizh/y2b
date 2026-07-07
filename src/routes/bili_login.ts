@@ -123,11 +123,9 @@ app.get('/qrcode/status', async (c) => {
     return c.json({ error: '缺少 qrcode_key 参数' }, 400);
   }
   try {
-    const buvid3 = await getBuvid3(requestId);
+    const { buvid3 } = await getBuvid3(requestId);
     const pollHeaders = { ...BILI_PASSPORT_HEADERS };
-    if (buvid3) {
-      pollHeaders['Cookie'] = `buvid3=${buvid3}`;
-    }
+    pollHeaders['Cookie'] = `buvid3=${buvid3}`;
     const resp = await fetch(`${BILI_QRCODE_INFO}?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
       headers: pollHeaders,
       redirect: 'manual',
@@ -212,8 +210,8 @@ async function parseBiliLoginCookies(
       return { ok: false, error: 'crossDomain URL 中缺少 SESSDATA 或 bili_jct' };
     }
 
-    // buvid3:用统一的 getBuvid3 函数(优先调 finger/spide,失败用随机 UUID 兜底)
-    const buvid3 = await getBuvid3(requestId);
+    // buvid3:用统一的 getBuvid3 函数(优先调 finger/spi,失败用本地生成兜底)
+    const { buvid3 } = await getBuvid3(requestId);
 
     // ac_time_value:从 SESSDATA 解码 JWT-like payload 取 exp
     // SESSDATA 实际格式是 base64url payload(非标准 JWT,无 signature 段)
