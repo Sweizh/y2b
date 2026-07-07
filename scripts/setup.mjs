@@ -39,9 +39,27 @@ function loadDevVars() {
 const devVars = loadDevVars();
 const env = { ...devVars, ...process.env };
 
-// 读取 KV id(默认用 local-dev-simulation,wrangler dev 会用本地 KV 模拟)
-const kvId = env.CLOUDFLARE_KV_ID || 'local-dev-simulation';
+// 读取 KV id
+// 生产环境(Cloudflare Git 部署或 CI):必须显式配置 CLOUDFLARE_KV_ID,未配置则报错退出
+// 本地开发:未配置时用 local-dev-simulation,wrangler dev 会用本地 KV 模拟
+const isCI = !!env.CI || !!env.CLOUDFLARE_BUILD_ID;
+const kvId = env.CLOUDFLARE_KV_ID || (isCI ? '' : 'local-dev-simulation');
 const kvPreviewId = env.CLOUDFLARE_KV_PREVIEW_ID || kvId;
+
+if (!kvId) {
+  console.error('');
+  console.error('✗ 生产部署环境未配置 CLOUDFLARE_KV_ID,无法生成有效的 wrangler.toml');
+  console.error('');
+  console.error('  请在 Cloudflare Dashboard 配置该环境变量:');
+  console.error('    Worker → Settings → Variables → Add variable');
+  console.error('    名称: CLOUDFLARE_KV_ID');
+  console.error('    值:   你的 KV 命名空间 ID(Workers & Pages → KV → 复制 ID)');
+  console.error('    类型: Plaintext(明文,构建时读取)');
+  console.error('');
+  console.error('  同时建议配置 CLOUDFLARE_KV_PREVIEW_ID(可与上面相同)');
+  console.error('');
+  process.exit(1);
+}
 
 // 如果 wrangler.toml 已存在,不覆盖(避免用户手动修改丢失)
 if (existsSync('wrangler.toml')) {
