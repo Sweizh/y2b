@@ -457,8 +457,12 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       </a>
     </nav>
 
-    <!-- Logout -->
+    <!-- Logout & Theme -->
     <div class="px-3 pb-5 pt-3" style="border-top:1px solid var(--apple-border)">
+      <button data-dom-id="theme-toggle-btn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors duration-150 mb-2" style="color:var(--apple-muted-foreground);background:transparent">
+        <span id="theme-toggle-icon" style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:16px">🌙</span>
+        <span>切换主题</span>
+      </button>
       <button data-dom-id="logout-btn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors duration-150" style="color:var(--apple-muted-foreground);background:transparent">
         <span data-icon="arrow-left" style="width:18px;height:18px"></span>
         <span>退出登录</span>
@@ -642,7 +646,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         <!-- Search bar -->
         <div class="flex items-center gap-3 mb-5">
           <input type="text" placeholder="输入 YouTube 频道名称或 ID" class="flex-1 h-10 px-4 rounded-lg text-sm" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-          <button class="h-10 px-5 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">搜索频道</button>
+          <button data-dom-id="channel-search-btn" class="h-10 px-5 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">搜索频道</button>
         </div>
 
         <!-- Channel list (rendered by loadChannels) -->
@@ -811,7 +815,21 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
 <script>
   // ===== 控制台完整交互脚本 =====
-  // 主题初始化
+  // 主题初始化与切换
+  function getCurrentTheme(){
+    return document.documentElement.classList.contains('dark')?'dark':'light';
+  }
+  function setThemeToggleIcon(){
+    var icon=document.getElementById('theme-toggle-icon');
+    if(icon){icon.textContent=getCurrentTheme()==='dark'?'🌙':'☀️';}
+  }
+  function applyTheme(t){
+    var h=document.documentElement;
+    if(t==='light'){h.classList.remove('dark');h.setAttribute('data-theme','light');}
+    else{h.classList.add('dark');h.setAttribute('data-theme','dark');}
+    try{localStorage.setItem('y2b-theme',t);}catch(e){}
+    setThemeToggleIcon();
+  }
   (function(){
     try{
       var t=localStorage.getItem('y2b-theme');
@@ -821,6 +839,13 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       else{h.classList.add('dark');h.setAttribute('data-theme','dark');}
     }catch(e){}
   })();
+  setThemeToggleIcon();
+  var themeToggleBtn=document.querySelector('[data-dom-id="theme-toggle-btn"]');
+  if(themeToggleBtn){
+    themeToggleBtn.addEventListener('click',function(){
+      applyTheme(getCurrentTheme()==='dark'?'light':'dark');
+    });
+  }
 
   // Toast 容器
   (function(){
@@ -978,13 +1003,40 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     wrapper.appendChild(btn);
   });
 
+  // ===== 统一 API 封装 =====
+  // 401 自动跳登录;非 JSON 响应给出友好错误而非"网络错误"
+  function apiSafeJson(r){
+    if(r.status===401){
+      location.href='login.html';
+      return Promise.reject(new Error('未登录'));
+    }
+    var ct=r.headers.get('content-type')||'';
+    if(ct.indexOf('application/json')<0){
+      return r.text().then(function(t){
+        throw new Error('服务端返回非 JSON('+(r.status||'??')+')');
+      });
+    }
+    return r.json();
+  }
+  window.apiSafeJson=apiSafeJson;
+
   // ===== 鉴权检查 =====
+  // 1. 系统未初始化 -> 跳 login
+  // 2. 系统已初始化 -> 探测登录态(任意受保护接口 401 即跳登录)
   fetch('/api/init-status',{credentials:'include'})
-    .then(function(r){return r.json();})
+    .then(apiSafeJson)
     .then(function(d){
       if(!d.initialized){
         location.href='login.html';
+        return;
       }
+      // 探测登录态:GET /api/config 受保护,401 跳登录
+      fetch('/api/config',{credentials:'include'})
+        .then(apiSafeJson)
+        .then(function(){ /* 已登录,继续 */ })
+        .catch(function(){
+          location.href='login.html';
+        });
     })
     .catch(function(){
       // 后端不可用时仍然显示静态页面（开发模式）
@@ -1123,6 +1175,20 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             }
           });
         }
+        // 表单异步填充完成后,重新采集脏值检测快照,避免 setupSave 在 fetch 返回前采集空快照导致按钮永久启用
+        if(credSaveCtx&&credSaveCtx.resnapshot)credSaveCtx.resnapshot();
+        if(aiSaveCtx&&aiSaveCtx.resnapshot)aiSaveCtx.resnapshot();
+        // 同时回显失败通知配置(复用本次 /api/config 结果,避免二次 fetch)
+        var nSwitch=document.getElementById('notify-enabled');
+        var nUrlInput=document.getElementById('notify-webhook-url');
+        var nUrl=cfg.notify_webhook||'';
+        if(nUrl){
+          if(nSwitch)nSwitch.checked=true;
+          if(nUrlInput)nUrlInput.value=nUrl;
+          if(typeof setNotifySwitchUI==='function')setNotifySwitchUI(true);
+        }else{
+          if(typeof setNotifySwitchUI==='function')setNotifySwitchUI(false);
+        }
         return cfg;
       });
   }
@@ -1148,7 +1214,10 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     // 脏值检测
     var fields=Array.from(section.querySelectorAll('input,textarea'));
     var snapshot={};
-    fields.forEach(function(f,i){snapshot[i]=f.value;});
+    function collectSnapshot(){
+      fields.forEach(function(f,i){snapshot[i]=f.value;});
+    }
+    collectSnapshot();
     function isDirty(){
       for(var i=0;i<fields.length;i++){
         if(fields[i].value!==snapshot[i])return true;
@@ -1224,7 +1293,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         }else{
           showToast(successMsg||'已保存','success');
           // 更新 snapshot
-          fields.forEach(function(f,i){snapshot[i]=f.value;});
+          collectSnapshot();
           refresh();
         }
       })
@@ -1234,25 +1303,36 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       });
     });
     refresh();
+    // 暴露重新采集快照的接口,供异步填充表单(loadConfigToForm)完成后调用,避免空快照导致脏值检测失真
+    return {resnapshot:function(){collectSnapshot();refresh();}};
   }
 
-  setupSave(document.getElementById('section-credentials'),'/api/config','账号凭证已保存');
-  setupSave(document.getElementById('section-ai-services'),'/api/config','AI 服务接口已保存');
+  var credSaveCtx=setupSave(document.getElementById('section-credentials'),'/api/config','账号凭证已保存');
+  var aiSaveCtx=setupSave(document.getElementById('section-ai-services'),'/api/config','AI 服务接口已保存');
 
   // ===== 测试按钮 =====
-  // 给账号凭证区块每个「测试」按钮绑定对应 API
+  // 按字段 label 文本分发到对应测试端点;无对应端点的字段不绑定(按钮仅做 UI 占位)
   function bindTestButtons(){
     var credSection=document.getElementById('section-credentials');
     var aiSection=document.getElementById('section-ai-services');
 
-    // 账号凭证区：所有测试按钮统一调 /api/test/bili
+    // 账号凭证区:仅 B 站 5 个字段调 /api/test/bili;管理密码/YouTube/GitHub 无后端测试端点,改为提示
+    var biliFields=['B站 SESSDATA','B站 bili_jct','B站 buvid3','B站 ac_time_value'];
     if(credSection){
-      credSection.querySelectorAll('button').forEach(function(btn){
-        if(btn.textContent.trim()==='测试'){
+      credSection.querySelectorAll('.flex.flex-col').forEach(function(div){
+        var lbl=div.querySelector('label');
+        var btn=div.querySelector('button');
+        if(!lbl||!btn)return;
+        var lblText=lbl.textContent.trim();
+        // label 末尾可能有「获取方式」按钮文本,只取主文本
+        var mainText=lblText.split('获取方式')[0].trim();
+        var endpoint='';
+        if(biliFields.indexOf(mainText)>=0)endpoint='/api/test/bili';
+        if(endpoint){
           btn.addEventListener('click',function(){
             setBtnLoading(btn,true,'测试中…');
-            fetch('/api/test/bili',{method:'POST',credentials:'include'})
-              .then(function(r){return r.json();})
+            fetch(endpoint,{method:'POST',credentials:'include'})
+              .then(apiSafeJson)
               .then(function(d){
                 setBtnLoading(btn,false);
                 showToast(d.message||(d.success?'测试成功':'测试失败'),d.success?'success':'error');
@@ -1262,24 +1342,30 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
                 showToast('测试失败：'+(e.message||e),'error');
               });
           });
+        }else{
+          // 无对应测试端点的字段:点击提示用户
+          btn.addEventListener('click',function(){
+            showToast('该字段无独立测试端点,请保存后在实际运行中验证','info');
+          });
         }
       });
     }
-    // AI 服务区：根据字段调用不同端点
+    // AI 服务区:语音识别/翻译 各有独立端点
     if(aiSection){
       aiSection.querySelectorAll('.flex.flex-col').forEach(function(div){
         var lbl=div.querySelector('label');
         var btn=div.querySelector('button');
         if(!lbl||!btn)return;
         var lblText=lbl.textContent.trim();
+        var mainText=lblText.split('获取方式')[0].trim();
         var endpoint='';
-        if(lblText.indexOf('语音识别')>=0)endpoint='/api/test/asr';
-        else if(lblText.indexOf('翻译')>=0)endpoint='/api/test/translate';
+        if(mainText.indexOf('语音识别')>=0)endpoint='/api/test/asr';
+        else if(mainText.indexOf('翻译')>=0)endpoint='/api/test/translate';
         if(endpoint){
           btn.addEventListener('click',function(){
             setBtnLoading(btn,true,'测试中…');
             fetch(endpoint,{method:'POST',credentials:'include'})
-              .then(function(r){return r.json();})
+              .then(apiSafeJson)
               .then(function(d){
                 setBtnLoading(btn,false);
                 showToast(d.message||(d.success?'测试成功':'测试失败'),d.success?'success':'error');
@@ -1299,186 +1385,225 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   var channelsSection=document.getElementById('section-channels');
   if(channelsSection){
     var searchInput=channelsSection.querySelector('input[type="text"]');
-    var searchBtn=channelsSection.querySelector('button');
-    var isSearchBtn=function(b){return b.textContent.trim()==='搜索频道';};
-    channelsSection.querySelectorAll('button').forEach(function(b){
-      if(isSearchBtn(b.textContent.trim()))searchBtn=b;
-    });
-    // 重新查找：找到文本为「搜索频道」的按钮
-    var allBtns=channelsSection.querySelectorAll('button');
-    for(var i=0;i<allBtns.length;i++){
-      if(allBtns[i].textContent.trim()==='搜索频道'){searchBtn=allBtns[i];break;}
-    }
+    var searchBtn=channelsSection.querySelector('[data-dom-id="channel-search-btn"]');
     if(searchBtn && searchInput){
       searchBtn.addEventListener('click',function(){
         var q=searchInput.value.trim();
         if(!q){showToast('请输入搜索关键词','error');return;}
+        // 显示 loading 占位
+        showSearchLoading(q);
         setBtnLoading(searchBtn,true,'搜索中…');
         fetch('/api/youtube/search?q='+encodeURIComponent(q),{credentials:'include'})
           .then(function(r){return r.json();})
           .then(function(d){
             setBtnLoading(searchBtn,false);
             if(d.error){
-              showToast(d.error,'error');
+              showSearchError(d.error);
               return;
             }
             var channels=d.channels||[];
             if(channels.length===0){
-              showToast('未搜索到频道','info');
+              renderSearchResults([],q);
               return;
             }
-            renderSearchResults(channels);
-            showToast('搜索到 '+channels.length+' 个频道','success');
+            renderSearchResults(channels,q);
           })
           .catch(function(e){
             setBtnLoading(searchBtn,false);
-            showToast('搜索失败：'+(e.message||e),'error');
+            showSearchError('搜索失败：'+(e.message||e));
           });
       });
       searchInput.addEventListener('keydown',function(e){
         if(e.key==='Enter'){e.preventDefault();searchBtn.click();}
       });
     }
-    // 渲染搜索结果
-    function renderSearchResults(channels){
+
+    // 搜索结果容器:插入到搜索栏之后
+    function getSearchResultsContainer(){
       var existing=channelsSection.querySelector('[data-search-results]');
-      if(existing)existing.remove();
+      if(existing)return existing;
       var wrap=document.createElement('div');
       wrap.setAttribute('data-search-results','');
       wrap.style.cssText='margin-bottom:16px';
-      channels.forEach(function(ch){
-        var card=document.createElement('div');
-        card.style.cssText='background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:16px;margin-bottom:8px';
-        card.innerHTML='<div style="display:flex;align-items:flex-start;gap:12px">'+
-          '<img src="'+(ch.avatar||'')+'" style="width:48px;height:48px;border-radius:50%;flex-shrink:0" onerror="this.style.display=\'none\'"/>'+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
-              '<span style="font-size:14px;font-weight:600;color:var(--apple-foreground)">'+escapeHtml(ch.name)+'</span>'+
-              '<button style="height:32px;padding:0 12px;border-radius:6px;border:none;background:var(--brand-500);color:#fff;font-size:12px;font-weight:500;cursor:pointer">关注</button>'+
-            '</div>'+
-            '<p style="font-size:12px;color:var(--apple-muted-foreground);margin:4px 0 0">'+escapeHtml(ch.subscribers||'')+'</p>'+
-            '<p style="font-size:12px;color:var(--apple-muted-foreground);margin:4px 0 0;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden">'+escapeHtml(ch.description||'')+'</p>'+
-          '</div>'+
-        '</div>';
-        var followBtn=card.querySelector('button');
-        followBtn.addEventListener('click',function(){
-          setBtnLoading(followBtn,true,'添加中…');
-          fetch('/api/channels',{
-            method:'POST',
-            credentials:'include',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({channel_id:ch.channel_id,name:ch.name})
-          })
-          .then(function(r){return r.json();})
-          .then(function(d){
-            setBtnLoading(followBtn,false);
-            if(d.error){
-              showToast(d.error,'error');
-            }else{
-              followBtn.textContent='已关注';
-              followBtn.style.background='var(--apple-secondary)';
-              followBtn.style.color='var(--apple-secondary-foreground)';
-              followBtn.disabled=true;
-              showToast('已关注 '+ch.name,'success');
-              loadChannels();
-            }
-          })
-          .catch(function(e){
-            setBtnLoading(followBtn,false);
-            showToast('关注失败：'+(e.message||e),'error');
-          });
-        });
-        wrap.appendChild(card);
-      });
-      // 插入到搜索栏之后
       var searchWrap=searchInput.parentElement.parentElement;
       searchWrap.parentNode.insertBefore(wrap,searchWrap.nextSibling);
+      return wrap;
+    }
+
+    function showSearchLoading(q){
+      var wrap=getSearchResultsContainer();
+      wrap.innerHTML='<div class="search-results-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+        '<span style="font-size:12px;font-weight:600;color:var(--apple-foreground)">搜索「'+escapeHtml(q)+'」的结果</span>'+
+        '<button class="search-clear-btn" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
+      '</div>'+
+      '<div style="background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:24px;text-align:center">'+
+        '<p style="font-size:13px;color:var(--apple-muted-foreground)">搜索中…</p>'+
+      '</div>';
+      var clearBtn=wrap.querySelector('.search-clear-btn');
+      if(clearBtn)clearBtn.onclick=function(){wrap.remove();};
+    }
+
+    function showSearchError(msg){
+      var wrap=getSearchResultsContainer();
+      wrap.innerHTML='<div class="search-results-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+        '<span style="font-size:12px;font-weight:600;color:var(--apple-foreground)">搜索结果</span>'+
+        '<button class="search-clear-btn" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
+      '</div>'+
+      '<div style="background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:24px;text-align:center">'+
+        '<p style="font-size:13px;color:var(--state-error)">'+escapeHtml(msg)+'</p>'+
+      '</div>';
+      var clearBtn=wrap.querySelector('.search-clear-btn');
+      if(clearBtn)clearBtn.onclick=function(){wrap.remove();};
+    }
+
+    // 渲染搜索结果
+    function renderSearchResults(channels,q){
+      var wrap=getSearchResultsContainer();
+      var header='<div class="search-results-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+        '<span style="font-size:12px;font-weight:600;color:var(--apple-foreground)">搜索「'+escapeHtml(q||'')+'」的结果 ('+channels.length+')</span>'+
+        '<button class="search-clear-btn" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
+      '</div>';
+
+      if(channels.length===0){
+        wrap.innerHTML=header+
+          '<div style="background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:24px;text-align:center">'+
+            '<p style="font-size:13px;color:var(--apple-muted-foreground)">未找到匹配的频道,试试其他关键词</p>'+
+          '</div>';
+      }else{
+        var cardsHtml=channels.map(function(ch){
+          var isFollowed=!!followedChannelIds[ch.channel_id];
+          var followBtnHtml=isFollowed
+            ?'<button disabled style="height:32px;padding:0 12px;border-radius:6px;border:none;background:var(--apple-secondary);color:var(--apple-muted-foreground);font-size:12px;font-weight:500;cursor:not-allowed;opacity:0.7">已关注</button>'
+            :'<button class="follow-btn" style="height:32px;padding:0 12px;border-radius:6px;border:none;background:var(--brand-500);color:#fff;font-size:12px;font-weight:500;cursor:pointer">关注</button>';
+          var avatarHtml=ch.avatar
+            ?'<img src="'+escapeHtml(ch.avatar)+'" style="width:48px;height:48px;border-radius:50%;flex-shrink:0;object-fit:cover" onerror="this.style.display=\'none\'"/>'
+            :'<div style="width:48px;height:48px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--brand-100),var(--brand-300))"></div>';
+          return '<div class="search-card" data-channel-id="'+escapeHtml(ch.channel_id)+'" style="background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:16px;margin-bottom:8px">'+
+            '<div style="display:flex;align-items:flex-start;gap:12px">'+
+              avatarHtml+
+              '<div style="flex:1;min-width:0">'+
+                '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+                  '<a href="https://www.youtube.com/channel/'+escapeHtml(ch.channel_id)+'" target="_blank" rel="noopener noreferrer" style="font-size:14px;font-weight:600;color:var(--apple-foreground);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onmouseover="this.style.color=\'var(--brand-500)\'" onmouseout="this.style.color=\'var(--apple-foreground)\'">'+escapeHtml(ch.name)+'</a>'+
+                  followBtnHtml+
+                '</div>'+
+                '<p style="font-size:12px;color:var(--apple-muted-foreground);margin:4px 0 0">'+escapeHtml(ch.subscribers||'')+'</p>'+
+                '<p style="font-size:12px;color:var(--apple-muted-foreground);margin:4px 0 0;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden">'+escapeHtml(ch.description||'')+'</p>'+
+              '</div>'+
+            '</div>'+
+          '</div>';
+        }).join('');
+        wrap.innerHTML=header+cardsHtml;
+
+        // 绑定关注按钮
+        wrap.querySelectorAll('.search-card').forEach(function(card){
+          var channelId=card.getAttribute('data-channel-id');
+          var name=card.querySelector('a').textContent;
+          var followBtn=card.querySelector('.follow-btn');
+          if(!followBtn)return;
+          followBtn.addEventListener('click',function(){
+            setBtnLoading(followBtn,true,'添加中…');
+            fetch('/api/channels',{
+              method:'POST',
+              credentials:'include',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({channel_id:channelId,name:name})
+            })
+            .then(function(r){return r.json();})
+            .then(function(d){
+              setBtnLoading(followBtn,false);
+              if(d.error){
+                showToast(d.error,'error');
+              }else{
+                followBtn.textContent='已关注';
+                followBtn.style.background='var(--apple-secondary)';
+                followBtn.style.color='var(--apple-muted-foreground)';
+                followBtn.disabled=true;
+                followBtn.style.cursor='not-allowed';
+                followBtn.style.opacity='0.7';
+                followBtn.classList.remove('follow-btn');
+                followedChannelIds[channelId]=true;
+                showToast('已关注 '+name,'success');
+                loadChannels();
+              }
+            })
+            .catch(function(e){
+              setBtnLoading(followBtn,false);
+              showToast('关注失败：'+(e.message||e),'error');
+            });
+          });
+        });
+      }
+
+      var clearBtn=wrap.querySelector('.search-clear-btn');
+      if(clearBtn)clearBtn.onclick=function(){wrap.remove();};
     }
     function escapeHtml(s){
       if(!s)return '';
       return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
     }
 
+    // 缓存已关注频道 channel_id 集合,供搜索结果标记已关注
+    var followedChannelIds={};
+    // 缓存投稿分区列表
+    var cachedTids=null;
+    // 缓存合集列表
+    var cachedSeasons=null;
+    var seasonsLoading=false;
+
+    // 加载投稿分区列表(静态表,不会失败)
+    function ensureTids(cb){
+      if(cachedTids){cb(cachedTids);return;}
+      fetch('/api/tids',{credentials:'include'})
+        .then(function(r){return r.json();})
+        .then(function(d){cachedTids=Array.isArray(d)?d:[];cb(cachedTids);})
+        .catch(function(){cachedTids=[];cb([]);});
+    }
+
+    // 加载 B 站合集列表(需 bili cookie,可能失败)
+    function ensureSeasons(cb){
+      if(cachedSeasons!==null){cb(cachedSeasons);return;}
+      if(seasonsLoading){setTimeout(function(){ensureSeasons(cb);},200);return;}
+      seasonsLoading=true;
+      fetch('/api/seasons',{credentials:'include'})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d && d.error){cachedSeasons=[];}
+          else{
+            // 适配多种返回结构:{seasons:[...]}/{list:[...]}/[...]
+            var arr=[];
+            if(Array.isArray(d))arr=d;
+            else if(d.seasons)arr=d.seasons;
+            else if(d.list)arr=d.list;
+            else if(d.items)arr=d.items;
+            cachedSeasons=arr;
+          }
+          seasonsLoading=false;
+          cb(cachedSeasons);
+        })
+        .catch(function(){cachedSeasons=[];seasonsLoading=false;cb([]);});
+    }
+
     // 加载已关注频道列表
     function loadChannels(){
       var list=document.getElementById('channels-list');
       if(!list)return;
+      list.innerHTML='<div class="rounded-lg px-4 py-8 text-center" style="background:var(--apple-background);border:1px solid var(--apple-border)"><p class="text-sm" style="color:var(--apple-muted-foreground)">加载中…</p></div>';
       fetch('/api/channels',{credentials:'include'})
         .then(function(r){return r.json();})
         .then(function(d){
-          var items=(d&&d.channels)||[];
+          var items=Array.isArray(d)?d:(d&&d.channels)||[];
+          followedChannelIds={};
+          items.forEach(function(ch){followedChannelIds[ch.channel_id]=true;});
           list.innerHTML='';
           if(items.length===0){
             list.innerHTML='<div class="rounded-lg px-4 py-8 text-center" style="background:var(--apple-background);border:1px solid var(--apple-border)"><p class="text-sm" style="color:var(--apple-muted-foreground)">暂无关注的频道，请使用上方搜索框添加</p></div>';
             return;
           }
-          items.forEach(function(ch){
-            var card=document.createElement('div');
-            card.style.cssText='background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:16px;margin-bottom:8px';
-            var enabled=ch.enabled!==false;
-            var toggleBg=enabled?'var(--brand-500)':'var(--background-400)';
-            var toggleKnob=enabled?'right:0.5':'left:0.5';
-            card.innerHTML='<div style="display:flex;align-items:flex-start;gap:12px">'+
-              '<div style="width:48px;height:48px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--brand-100),var(--brand-300))"></div>'+
-              '<div style="flex:1;min-width:0">'+
-                '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
-                  '<span style="font-size:14px;font-weight:600;color:var(--apple-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escapeHtml(ch.name||ch.channel_id)+'</span>'+
-                  '<button data-del-channel="'+escapeHtml(ch.id||ch.channel_id)+'" style="height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--apple-border);background:transparent;color:var(--state-error);font-size:12px;font-weight:500;cursor:pointer">删除</button>'+
-                '</div>'+
-                '<p style="font-size:12px;color:var(--apple-muted-foreground);margin:4px 0 0;font-family:monospace">'+escapeHtml(ch.channel_id||'')+'</p>'+
-              '</div>'+
-            '</div>'+
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--apple-border)">'+
-              '<span style="font-size:12px;color:var(--apple-muted-foreground)">启用自动投稿</span>'+
-              '<div data-toggle-channel="'+escapeHtml(ch.id||ch.channel_id)+'" class="relative" style="width:40px;height:20px;border-radius:9999px;background:'+toggleBg+';cursor:pointer">'+
-                '<div class="absolute" style="top:2px;'+toggleKnob+';width:16px;height:16px;border-radius:9999px;background:var(--background-50)"></div>'+
-              '</div>'+
-            '</div>';
-            list.appendChild(card);
-          });
-          // 绑定删除
-          list.querySelectorAll('[data-del-channel]').forEach(function(btn){
-            btn.addEventListener('click',function(){
-              var id=btn.getAttribute('data-del-channel');
-              var row=btn.closest('div[style*="padding:16px"]');
-              showModal({
-                title:'确认删除频道',
-                body:'删除后该频道的自动投稿将停止。确认删除?',
-                okText:'删除',
-                onOk:function(){
-                  fetch('/api/channels/'+encodeURIComponent(id),{method:'DELETE',credentials:'include'})
-                    .then(function(r){return r.json();})
-                    .then(function(d){
-                      if(d.error){showToast(d.error,'error');}
-                      else{showToast('已删除','success');loadChannels();}
-                    })
-                    .catch(function(e){showToast('删除失败:'+(e.message||e),'error');});
-                }
-              });
-            });
-          });
-          // 绑定启用切换
-          list.querySelectorAll('[data-toggle-channel]').forEach(function(toggle){
-            toggle.addEventListener('click',function(){
-              var id=toggle.getAttribute('data-toggle-channel');
-              var knob=toggle.querySelector('div');
-              var nowOn=toggle.style.background.indexOf('brand-500')>=0;
-              var newVal=!nowOn;
-              fetch('/api/channels/'+encodeURIComponent(id),{
-                method:'PUT',
-                credentials:'include',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({enabled:newVal})
-              })
-              .then(function(r){return r.json();})
-              .then(function(d){
-                if(d.error){showToast(d.error,'error');return;}
-                toggle.style.background=newVal?'var(--brand-500)':'var(--background-400)';
-                knob.style.left=newVal?'':'2px';
-                knob.style.right=newVal?'2px':'';
-                showToast(newVal?'已启用':'已停用','success');
-              })
-              .catch(function(e){showToast('操作失败:'+(e.message||e),'error');});
+          // 先加载 tids 和 seasons,再渲染卡片
+          ensureTids(function(tids){
+            ensureSeasons(function(seasons){
+              items.forEach(function(ch){list.appendChild(renderChannelCard(ch,tids,seasons));});
+              bindChannelCardEvents(list);
             });
           });
         })
@@ -1487,16 +1612,215 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           list.innerHTML='<div class="rounded-lg px-4 py-8 text-center" style="background:var(--apple-background);border:1px solid var(--apple-border)"><p class="text-sm" style="color:var(--state-error)">加载失败</p></div>';
         });
     }
+
+    // 渲染单个频道配置卡片
+    function renderChannelCard(ch,tids,seasons){
+      var enabled=ch.enabled!==false;
+      var toggleBg=enabled?'var(--brand-500)':'var(--background-400)';
+      var toggleKnob=enabled?'right:2px':'left:2px';
+      var cid=escapeHtml(ch.id||ch.channel_id);
+
+      // 合集 options
+      var seasonOpts='<option value="">不加入合集</option>';
+      if(seasons.length===0){
+        seasonOpts='<option value="" disabled>需先配置 B 站凭证</option>';
+      }else{
+        seasons.forEach(function(s){
+          var sid=escapeHtml(String(s.id||s.season_id||''));
+          var sname=escapeHtml(s.name||s.title||s.season_title||('合集 '+sid));
+          var sel=(String(ch.season_id)===String(s.id||s.season_id))?' selected':'';
+          seasonOpts+='<option value="'+sid+'"'+sel+'>'+sname+'</option>';
+        });
+      }
+
+      // 分区 options(只显示有意义的分区,tid<=130)
+      var tidOpts='<option value="">默认(知识--科技科普)</option>';
+      tids.filter(function(t){return t.tid<=130;}).forEach(function(t){
+        var sel=(ch.tid===t.tid)?' selected':'';
+        tidOpts+='<option value="'+t.tid+'"'+sel+'>'+escapeHtml(t.name)+'</option>';
+      });
+
+      // 字幕模式
+      var sm={translated:'翻译字幕',original:'原语言字幕',both:'双语字幕',none:'不上传字幕'};
+      var smOpts='';
+      Object.keys(sm).forEach(function(k){
+        var sel=(ch.subtitle_mode||'translated')===k?' selected':'';
+        smOpts+='<option value="'+k+'"'+sel+'>'+sm[k]+'</option>';
+      });
+
+      // 投稿类型
+      var isSelf=(ch.copyright===1);
+      var copyrightHtml='<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--apple-foreground)">'+
+        '<input type="radio" name="copyright-'+cid+'" value="1" '+(isSelf?'checked':'')+' style="accent-color:var(--brand-500)"> 自制</label>'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--apple-foreground)">'+
+        '<input type="radio" name="copyright-'+cid+'" value="2" '+(!isSelf?'checked':'')+' style="accent-color:var(--brand-500)"> 转载</label>';
+
+      var card=document.createElement('div');
+      card.className='channel-card';
+      card.setAttribute('data-channel-id',cid);
+      card.style.cssText='background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:16px;margin-bottom:8px';
+      card.innerHTML=
+        '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">'+
+          '<div style="width:48px;height:48px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--brand-100),var(--brand-300))"></div>'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+              '<a href="https://www.youtube.com/channel/'+escapeHtml(ch.channel_id)+'" target="_blank" rel="noopener noreferrer" style="font-size:14px;font-weight:600;color:var(--apple-foreground);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onmouseover="this.style.color=\'var(--brand-500)\'" onmouseout="this.style.color=\'var(--apple-foreground)\'">'+escapeHtml(ch.name||ch.channel_id)+'</a>'+
+              '<button data-del-channel="'+cid+'" style="height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--apple-border);background:transparent;color:var(--state-error);font-size:12px;font-weight:500;cursor:pointer;flex-shrink:0">删除</button>'+
+            '</div>'+
+            '<p style="font-size:12px;color:var(--apple-muted-foreground);margin:4px 0 0;font-family:monospace">'+escapeHtml(ch.channel_id||'')+'</p>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding-top:12px;border-top:1px solid var(--apple-border)">'+
+          '<div style="display:flex;flex-direction:column;gap:4px">'+
+            '<label style="font-size:12px;color:var(--apple-muted-foreground)">B站合集</label>'+
+            '<select data-field="season_id" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+seasonOpts+'</select>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;gap:4px">'+
+            '<label style="font-size:12px;color:var(--apple-muted-foreground)">投稿分区</label>'+
+            '<select data-field="tid" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+tidOpts+'</select>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;gap:4px">'+
+            '<label style="font-size:12px;color:var(--apple-muted-foreground)">默认标签</label>'+
+            '<input type="text" data-field="tags" value="'+escapeHtml(ch.tags||'')+'" placeholder="逗号分隔" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)"/>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;gap:4px">'+
+            '<label style="font-size:12px;color:var(--apple-muted-foreground)">投稿类型</label>'+
+            '<div style="display:flex;align-items:center;gap:16px;height:32px">'+copyrightHtml+'</div>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;gap:4px">'+
+            '<label style="font-size:12px;color:var(--apple-muted-foreground)">字幕模式</label>'+
+            '<select data-field="subtitle_mode" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+smOpts+'</select>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;justify-content:space-between">'+
+            '<label style="font-size:12px;color:var(--apple-muted-foreground)">启用自动投稿</label>'+
+            '<div data-toggle-channel="'+cid+'" data-enabled="'+(enabled?'1':'0')+'" style="width:40px;height:20px;border-radius:9999px;background:'+toggleBg+';cursor:pointer;position:relative;transition:background .18s">'+
+              '<div style="position:absolute;top:2px;'+toggleKnob+';width:16px;height:16px;border-radius:9999px;background:var(--background-50);transition:left .18s,right .18s"></div>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:flex;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--apple-border)">'+
+          '<button data-save-channel="'+cid+'" style="height:32px;padding:0 16px;border-radius:6px;border:none;background:var(--brand-500);color:#fff;font-size:12px;font-weight:500;cursor:pointer">保存配置</button>'+
+        '</div>';
+      return card;
+    }
+
+    // 保存单张频道卡片配置;返回 Promise,resolve 为响应体(含 .error 字段时表示失败)
+    function saveChannelCard(card){
+      var btn=card.querySelector('[data-save-channel]');
+      var id=btn?btn.getAttribute('data-save-channel'):'';
+      var payload={};
+      card.querySelectorAll('[data-field]').forEach(function(el){
+        var f=el.getAttribute('data-field');
+        var v=el.value;
+        if(f==='tid'){v=v?parseInt(v,10):undefined;}
+        payload[f]=v;
+      });
+      // 投稿类型(radio)
+      var radio=card.querySelector('input[name="copyright-'+id+'"]:checked');
+      if(radio)payload.copyright=parseInt(radio.value,10);
+      if(btn)setBtnLoading(btn,true,'保存中…');
+      return fetch('/api/channels/'+encodeURIComponent(id),{
+        method:'PUT',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      })
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(btn)setBtnLoading(btn,false);
+        return d;
+      })
+      .catch(function(e){
+        if(btn)setBtnLoading(btn,false);
+        return {error:(e.message||e)};
+      });
+    }
+
+    // 绑定频道卡片事件(删除/启用切换/保存)
+    function bindChannelCardEvents(list){
+      // 删除
+      list.querySelectorAll('[data-del-channel]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          var id=btn.getAttribute('data-del-channel');
+          showModal({
+            title:'确认删除频道',
+            body:'删除后该频道的自动投稿将停止。确认删除?',
+            okText:'删除',
+            onOk:function(){
+              fetch('/api/channels/'+encodeURIComponent(id),{method:'DELETE',credentials:'include'})
+                .then(function(r){return r.json();})
+                .then(function(d){
+                  if(d.error){showToast(d.error,'error');}
+                  else{showToast('已删除','success');loadChannels();}
+                })
+                .catch(function(e){showToast('删除失败:'+(e.message||e),'error');});
+            }
+          });
+        });
+      });
+
+      // 启用切换
+      list.querySelectorAll('[data-toggle-channel]').forEach(function(toggle){
+        toggle.addEventListener('click',function(){
+          var id=toggle.getAttribute('data-toggle-channel');
+          var knob=toggle.querySelector('div');
+          var nowOn=toggle.getAttribute('data-enabled')==='1';
+          var newVal=!nowOn;
+          fetch('/api/channels/'+encodeURIComponent(id),{
+            method:'PUT',
+            credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({enabled:newVal})
+          })
+          .then(function(r){return r.json();})
+          .then(function(d){
+            if(d.error){showToast(d.error,'error');return;}
+            toggle.setAttribute('data-enabled',newVal?'1':'0');
+            toggle.style.background=newVal?'var(--brand-500)':'var(--background-400)';
+            knob.style.left=newVal?'':'2px';
+            knob.style.right=newVal?'2px':'';
+            showToast(newVal?'已启用':'已停用','success');
+          })
+          .catch(function(e){showToast('操作失败:'+(e.message||e),'error');});
+        });
+      });
+
+      // 保存配置
+      list.querySelectorAll('[data-save-channel]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          var card=btn.closest('.channel-card');
+          if(!card)return;
+          saveChannelCard(card).then(function(d){
+            if(d.error)showToast(d.error,'error');
+            else showToast('配置已保存','success');
+          });
+        });
+      });
+    }
     loadChannels();
 
-    // 「保存频道配置」按钮
+    // 「保存频道配置」按钮:批量保存所有卡片
     var saveChannelBtn=null;
     channelsSection.querySelectorAll('button').forEach(function(b){
       if(b.textContent.trim()==='保存频道配置')saveChannelBtn=b;
     });
     if(saveChannelBtn){
       saveChannelBtn.addEventListener('click',function(){
-        showToast('频道配置在每张卡片下方单独保存（此按钮暂不实现）','info');
+        var cards=channelsSection.querySelectorAll('.channel-card');
+        if(cards.length===0){showToast('暂无频道可保存','info');return;}
+        setBtnLoading(saveChannelBtn,true,'批量保存中…');
+        var promises=[];
+        cards.forEach(function(card){promises.push(saveChannelCard(card));});
+        Promise.all(promises).then(function(results){
+          setBtnLoading(saveChannelBtn,false);
+          var ok=0,fail=0;
+          results.forEach(function(d){if(d&&d.error)fail++;else ok++;});
+          if(fail===0){
+            showToast('批量保存完成,成功 '+ok+' 个','success');
+          }else{
+            showToast('批量保存:成功 '+ok+' 个,失败 '+fail+' 个','error');
+          }
+        });
       });
     }
   }
@@ -1587,7 +1911,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
                   '<td style="padding:12px 16px;font-size:12px;color:var(--apple-foreground)">'+escapeHtml(r.video_title||'')+'</td>'+
                   '<td style="padding:12px 16px">'+statusBadge+'</td>'+
                   '<td style="padding:12px 16px;font-size:12px;font-family:monospace;color:var(--apple-muted-foreground);white-space:nowrap">'+timeStr+'</td>'+
-                  '<td style="padding:12px 16px;font-size:12px;color:var(--apple-muted-foreground)">'+(r.message||'--')+'</td>';
+                  '<td style="padding:12px 16px;font-size:12px;color:var(--apple-muted-foreground)">'+escapeHtml(r.message||'--')+'</td>';
                 tbody.appendChild(tr);
               });
             }
@@ -1719,21 +2043,6 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         });
       });
     }
-
-    // 从 /api/config 读取回显
-    fetch('/api/config',{credentials:'include'})
-      .then(function(r){return r.json();})
-      .then(function(cfg){
-        var url=cfg.notify_webhook||'';
-        if(url){
-          if(notifySwitch)notifySwitch.checked=true;
-          if(notifyUrlInput)notifyUrlInput.value=url;
-          setNotifySwitchUI(true);
-        }else{
-          setNotifySwitchUI(false);
-        }
-      })
-      .catch(function(e){console.warn('[notify load]',e);});
   }
 
   // ===== 手动添加视频 =====

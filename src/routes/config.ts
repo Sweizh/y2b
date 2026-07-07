@@ -11,25 +11,27 @@ app.get('/', async (c) => {
   return c.json(maskConfig(cfg));
 });
 
-// 更新配置
+// 更新配置(白名单字段,防止注入任意字段)
 app.put('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const existing = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
 
-  // 前端可能传脱敏字段（含 ****），表示用户未修改该字段，保留原值
+  // 允许更新的字段白名单(admin_password/pipeline_token/initialized 不在此列)
+  const ALLOWED_FIELDS = [
+    'bili_sessdata', 'bili_jct', 'bili_buvid3', 'ac_time_value',
+    'yt_api_key', 'yt_cookies', 'gh_token', 'gh_repo',
+    'asr_api', 'asr_key', 'translate_api', 'translate_key',
+    'notify_webhook',
+  ];
   const merged: any = { ...existing };
-  for (const [k, v] of Object.entries(body)) {
-    if (typeof v === 'string' && v.includes('****')) {
-      // 保留原值
-      continue;
-    }
-    merged[k] = v;
+  for (const f of ALLOWED_FIELDS) {
+    if (body[f] === undefined) continue;
+    const v = body[f];
+    // 前端可能传脱敏字段(含 ****),表示用户未修改该字段,保留原值
+    if (typeof v === 'string' && v.includes('****')) continue;
+    // 显式传 null/空串表示清空
+    merged[f] = v === null ? '' : String(v);
   }
-
-  // admin_password 不通过此接口修改
-  delete merged.admin_password;
-  delete merged.pipeline_token;
-  delete merged.initialized;
 
   await putConfig(c.env.YT2BILI_KV, merged, c.env.ENCRYPTION_KEY || '');
   return c.json({ success: true });

@@ -10,5 +10,9 @@ declare global {
     __STATIC_CONTENT: KVNamespace;
     // 加密主密钥（wrangler secret put ENCRYPTION_KEY，32 字节随机字符串）
     ENCRYPTION_KEY: string;
+    // 可选:CORS 白名单,逗号分隔,如 "https://y2b.sweizh.top,https://yt2bili.xxx.workers.dev"
+    // 不配置时禁用跨域(同源访问)
+    ALLOWED_ORIGINS?: string;
   }
 }
+

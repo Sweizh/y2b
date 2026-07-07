@@ -8,7 +8,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
 import manifestJSON from '__STATIC_CONTENT_MANIFEST';
 import { getRawConfig } from './kv';
-import { getSessionFromRequest } from './auth';
+import { getSessionFromRequest, getSession } from './auth';
 import authRoutes from './routes/auth';
 import configRoutes from './routes/config';
 import channelRoutes from './routes/channels';
@@ -63,8 +63,16 @@ app.use('*', async (c, next) => {
 
 // 全局中间件
 app.use('*', secureHeaders());
+// CORS:仅在显式配置 ALLOWED_ORIGINS 时启用跨域,且使用白名单
+// 默认行为:同源(不返回 ACAO 头),浏览器自动允许同源请求
+// 配置示例:ALLOWED_ORIGINS="https://y2b.sweizh.top,https://yt2bili.xxx.workers.dev"
 app.use('*', cors({
-  origin: (origin) => origin || '*',  // 同源
+  origin: (origin, c) => {
+    const allowed = (c.env as any).ALLOWED_ORIGINS;
+    if (!allowed) return null;  // 不返回 ACAO,等同禁用跨域
+    const list = allowed.split(',').map((s: string) => s.trim());
+    return list.indexOf(origin) >= 0 ? origin : null;
+  },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
@@ -95,7 +103,6 @@ app.use('/api/*', async (c, next) => {
   }
   // 校验 Session
   const sessionId = getSessionFromRequest(c.req.raw);
-  const { getSession } = await import('./auth');
   const ok = await getSession(c.env.YT2BILI_KV, sessionId);
   if (!ok) {
     return c.json({ error: '未登录', code: 'UNAUTHORIZED' }, 401);
@@ -159,6 +166,7 @@ app.onError((err, c) => {
   const requestId = c.get('requestId') || crypto.randomUUID();
   const start = c.get('requestStart') || Date.now();
   const url = new URL(c.req.url);
+  // 详细错误写入日志(含 stack),但仅向客户端返回 requestId,不泄露内部细节
   logEvent('error', 'exception', {
     requestId,
     method: c.req.method,
@@ -168,7 +176,7 @@ app.onError((err, c) => {
     stack: err.stack,
   });
   return c.json({
-    error: err.message || 'Internal Server Error',
+    error: 'Internal Server Error',
     requestId,
   }, 500);
 });
