@@ -25,6 +25,7 @@ app.put('/', async (c) => {
     'gh_token', 'gh_repo',
     'asr_api', 'asr_key', 'translate_api', 'translate_key',
     'notify_webhook',
+    'title_template',  // 标题翻译模板(非敏感文本,不脱敏不加密)
   ];
   const merged: any = { ...existing };
   for (const f of ALLOWED_FIELDS) {

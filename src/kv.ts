@@ -39,6 +39,9 @@ export interface Config {
   translate_key?: string;
   // 通知
   notify_webhook?: string;
+  // 标题翻译模板(全局,支持变量 {channel} 频道名、{title} 翻译后标题)
+  // 留空则不翻译不套模板,沿用 yt-dlp 原始标题
+  title_template?: string;
 }
 
 export interface Channel {
@@ -75,6 +78,8 @@ export interface ManualQueueItem {
   url?: string;
   title?: string;
   channel_config_id?: string;
+  season_id?: string;        // 手动指定 B 站合集(优先于 channel_config.season_id)
+  section_id?: string;       // 合集小节 ID
   added_at: number;
   status: 'pending' | 'processing' | 'retry';
   retry_count?: number;

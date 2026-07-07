@@ -8,10 +8,11 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 - **凭证管理**：B 站 / YouTube / GitHub / ASR / 翻译 API 密钥，AES-GCM 加密存储，前端脱敏回显
 - **频道管理**：搜索 YouTube 频道 → 关注 → 配置合集/分区/标签/字幕模式(4 选项:翻译字幕/原语言字幕/双语字幕/不上传)
 - **运行状态**：上次运行时间、累计处理数、处理记录表(含状态色标)、立即触发流水线、**已处理视频列表**(含删除触发重新处理)、**失败通知配置**(Webhook URL + 启用开关)
-- **手动队列**：多行 URL 批量添加(支持完整 URL / 短链接 / 纯视频 ID)、删除二次确认
+- **手动队列**：多行 URL 批量添加(支持完整 URL / 短链接 / 纯视频 ID)、删除二次确认、**可选 B 站合集**(优先级:手动指定 > 频道默认 > 不进合集)
 - **Pipeline API**：供 GitHub Actions Runner 调用，Bearer Token 鉴权
 - **GitHub Actions 流水线**：Worker `/api/trigger` 触发 `repository_dispatch` 事件,启动 `process.yml` 运行 Python Runner
 - **Python Runner**：yt-dlp 下载 → ffmpeg 提取音频 → ASR 转写 → 翻译字幕 → bilibili-api-python 上传 → 追加合集
+- **标题翻译模板**：全局配置 `title_template`,支持变量 `{channel}`(频道名)、`{title}`(翻译后标题),通过翻译 API prompt 注入实现;留空则不翻译不套模板(向后兼容)
 - **Cookie 自动续期**：检测 ac_time_value 距过期 < 1 小时自动调用 B 站刷新接口,新 Cookie 回写 Worker
 - **失败通知**：连续失败 ≥ 3 次调用 Webhook(支持企业微信/钉钉/Server酱)
 - **结构化日志**：Worker 关键路径输出 JSON 日志(requestId/event/status/duration),`wrangler tail` 可按字段过滤
@@ -189,8 +190,17 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 2. 填写 YouTube API Key(用于频道搜索,可选),或点「OAuth 登录 YouTube」用 Google 账号授权
 3. 填写 ASR API + 翻译 API
 4. 填写 GitHub Token + 仓库
-5. 每项填完点「测试」按钮验证连通性
-6. (可选)在运行状态区块底部配置「失败通知」Webhook URL,启用后连续失败 ≥ 3 次会发送告警
+5. (可选)配置「标题翻译模板」:支持变量 `{channel}`(频道名)、`{title}`(翻译后标题),示例 `【{channel}】{title}`。Runner 在上传前调翻译 API,prompt 中注入模板(预先替换 `{channel}`,LLM 只填 `{title}`)。**留空则不翻译不套模板**,沿用 yt-dlp 原始标题(向后兼容)
+6. 每项填完点「测试」按钮验证连通性
+7. (可选)在运行状态区块底部配置「失败通知」Webhook URL,启用后连续失败 ≥ 3 次会发送告警
+
+### 手动队列合集选择
+
+在「手动添加视频」区块添加视频 URL 时,可选「B 站合集」select:
+- 不选合集(默认):若绑定了频道,则用频道配置的合集;否则不进合集
+- 选了合集:该视频投稿后追加到指定合集(优先于频道默认合集)
+
+合集优先级:手动指定 > 频道默认 > 不进合集
 
 ## 全自动部署(关联 GitHub)
 

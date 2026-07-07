@@ -16,6 +16,8 @@ app.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const urls: string[] = body.urls || [];
   const channelConfigId = body.channel_config_id;
+  const seasonId = body.season_id;
+  const sectionId = body.section_id;
   if (!Array.isArray(urls) || urls.length === 0) {
     return c.json({ error: '请输入视频 URL' }, 400);
   }
@@ -31,6 +33,8 @@ app.post('/', async (c) => {
       url: normalizeUrl(videoId),
       title: videoId,
       channel_config_id: channelConfigId,
+      season_id: body.season_id || '',
+      section_id: body.section_id || '',
       added_at: Date.now(),
       status: 'pending',
       retry_count: 0,

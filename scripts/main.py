@@ -158,6 +158,42 @@ def call_translate(translate_api: str, translate_key: str, srt_content: str) -> 
     return data["choices"][0]["message"]["content"]
 
 
+def call_translate_title(translate_api: str, translate_key: str, original_title: str, template_with_channel: str) -> str:
+    """调用翻译 API 把原标题翻译为中文并套用模板
+
+    Args:
+        template_with_channel: 已预替换 {channel} 的模板,如 "【频道名】{title}"
+            LLM 只需填 {title} 部分(翻译后的中文标题)
+    Returns:
+        LLM 输出的最终标题(已套模板)
+    """
+    if not translate_api or not translate_key:
+        raise RuntimeError("翻译 API 未配置")
+    prompt = (
+        "请把以下英文视频标题翻译为简体中文,然后严格按以下格式输出,"
+        "只输出最终标题,不要任何解释或引号。\n"
+        f"格式:{template_with_channel}\n"
+        f"原标题:{original_title}"
+    )
+    resp = requests.post(
+        translate_api,
+        headers={
+            "Authorization": f"Bearer {translate_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+        },
+        timeout=60,
+    )
+    if not resp.ok:
+        raise RuntimeError(f"标题翻译 API 返回 {resp.status_code}: {resp.text[:200]}")
+    data = resp.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+
 def upload_to_bili(cfg: dict, video_path: str, cover_path: str, title: str,
                    desc: str, tags: list, tid: int, copyright_: int,
                    subtitle_files: dict, video_id: str = "") -> tuple:
@@ -355,7 +391,7 @@ def detect_origin_lang(srt_content: str) -> str:
     return "en-US"
 
 
-def process_video(video_id: str, cfg: dict, channel: dict = None) -> dict:
+def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_override: str = None, section_id_override: str = None) -> dict:
     """
     处理单个视频,返回结果 dict
     {
@@ -448,6 +484,26 @@ def process_video(video_id: str, cfg: dict, channel: dict = None) -> dict:
             raise RuntimeError(f"下载失败: {e}")
         log("download", "success", video_id=video_id, title=title[:50])
 
+        # 1.5 标题翻译(若配置了 title_template)
+        title_template = cfg.get("title_template", "")
+        if title_template:
+            try:
+                log("translate_title", "start", video_id=video_id, original_title=title[:50])
+                # 预替换 {channel}(无频道则空串)
+                channel_name = channel.get("name", "") if channel else ""
+                template_with_channel = title_template.replace("{channel}", channel_name)
+                translated = call_translate_title(
+                    cfg.get("translate_api", ""),
+                    cfg.get("translate_key", ""),
+                    title,
+                    template_with_channel,
+                )
+                title = translated[:80]  # B 站标题限 80 字
+                result["title"] = title
+                log("translate_title", "success", video_id=video_id, final_title=title[:50])
+            except Exception as e:
+                raise RuntimeError(f"标题翻译失败: {e}")
+
         # 2. 提取音频
         log("extract_audio", "start", video_id=video_id)
         audio_path = os.path.join(work_dir, f"{video_id}.mp3")
@@ -525,9 +581,11 @@ def process_video(video_id: str, cfg: dict, channel: dict = None) -> dict:
             result["subtitle_error"] = subtitle_error
 
         # 6. 追加合集(若配置)
-        if channel and channel.get("season_id"):
+        effective_season_id = season_id_override or (channel.get("season_id") if channel else None)
+        if effective_season_id:
             try:
-                append_to_season(cfg, bvid, channel["season_id"], channel.get("section_id"))
+                effective_section_id = section_id_override or (channel.get("section_id") if channel else None)
+                append_to_season(cfg, bvid, effective_season_id, effective_section_id)
             except Exception as e:
                 # 合集失败提升到 error,记录到 result 供 Worker 决策
                 log("bili_season", "error", bvid=bvid, error=str(e)[:200])
@@ -756,7 +814,9 @@ def main():
                 channel_config = next(
                     (c for c in channels if c.get("id") == config_id), None,
                 )
-            result = process_video(video_id, cfg, channel_config)
+            item_season_id = item.get("season_id") or None
+            item_section_id = item.get("section_id") or None
+            result = process_video(video_id, cfg, channel_config, season_id_override=item_season_id, section_id_override=item_section_id)
             results.append(result)
             if not writeback_single(result):
                 failed_results.append(result)

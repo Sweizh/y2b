@@ -683,6 +683,12 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
+
+          <!-- 标题翻译模板 -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">标题翻译模板</label>
+            <input type="text" data-field="title_template" value="" placeholder="支持变量: {channel}(频道名)、{title}(翻译后标题),留空则不翻译不套模板。示例:【{channel}】{title}" readonly class="h-9 px-3 rounded-lg text-xs font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+          </div>
         </div>
 
         <!-- Save button -->
@@ -834,6 +840,9 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           <div class="flex items-center gap-3">
             <select data-dom-id="manual-channel-select" class="h-10 px-3 rounded-lg text-sm shrink-0" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <option value="">不指定频道</option>
+            </select>
+            <select data-dom-id="manual-season-select" class="h-10 px-3 rounded-lg text-sm shrink-0" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <option value="">不指定合集(用频道默认)</option>
             </select>
             <button data-dom-id="manual-add-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">添加到队列</button>
           </div>
@@ -1271,6 +1280,11 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
               inp.value=cfg[key];
             }
           });
+          // 标题翻译模板回显(用 data-field 标识,不走 label 映射)
+          var titleTplInput=aiSection.querySelector('[data-field="title_template"]');
+          if(titleTplInput){
+            titleTplInput.value=cfg.title_template||'';
+          }
         }
         // 表单异步填充完成后,重新采集脏值检测快照,避免 setupSave 在 fetch 返回前采集空快照导致按钮永久启用
         if(credSaveCtx&&credSaveCtx.resnapshot)credSaveCtx.resnapshot();
@@ -1382,6 +1396,11 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             body[key]=inp.value;
           }
         });
+        // 标题翻译模板(用 data-field 标识,留空亦需提交以清空配置)
+        var titleTplInput=aiSection.querySelector('[data-field="title_template"]');
+        if(titleTplInput){
+          body.title_template=titleTplInput.value;
+        }
       }
       fetch(endpoint,{
         method:'PUT',
@@ -2198,6 +2217,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       });
     }
     var manualChannelSelect=manualSection.querySelector('[data-dom-id="manual-channel-select"]');
+    var manualSeasonSelect=manualSection.querySelector('[data-dom-id="manual-season-select"]');
     var queueList=document.getElementById('manual-queue-list');
     if(textarea && addBtn){
       addBtn.addEventListener('click',function(){
@@ -2208,6 +2228,10 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         // 包含所选频道 ID(若 select 有值)
         if(manualChannelSelect && manualChannelSelect.value){
           body.channel_config_id=manualChannelSelect.value;
+        }
+        // 包含所选合集 ID(若 select 有值)
+        if(manualSeasonSelect && manualSeasonSelect.value){
+          body.season_id=manualSeasonSelect.value;
         }
         setBtnLoading(addBtn,true,'添加中…');
         fetch('/api/manual-queue',{
@@ -2256,6 +2280,38 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         });
     }
     loadManualChannelOptions();
+    // 加载「B 站合集」select 的合集选项(复用 /api/seasons,与频道卡片一致)
+    function loadManualSeasonOptions(){
+      if(!manualSeasonSelect)return;
+      fetch('/api/seasons',{credentials:'include'})
+        .then(apiSafeJson)
+        .then(function(d){
+          // 适配多种返回结构:{seasons:[...]}/{list:[...]}/[...]
+          var seasons=[];
+          if(d && d.error){seasons=[];}
+          else if(Array.isArray(d))seasons=d;
+          else if(d.seasons)seasons=d.seasons;
+          else if(d.list)seasons=d.list;
+          else if(d.items)seasons=d.items;
+          var seasonOpts='<option value="">不指定合集(用频道默认)</option>';
+          if(seasons.length===0){
+            seasonOpts='<option value="" disabled>需先配置 B 站凭证</option>';
+          }else{
+            seasons.forEach(function(s){
+              var sid=escapeHtml(String(s.id||s.season_id||''));
+              var sname=escapeHtml(s.name||s.title||s.season_title||('合集 '+sid));
+              seasonOpts+='<option value="'+sid+'">'+sname+'</option>';
+            });
+          }
+          var currentVal=manualSeasonSelect.value;
+          manualSeasonSelect.innerHTML=seasonOpts;
+          if(currentVal)manualSeasonSelect.value=currentVal;
+        })
+        .catch(function(e){
+          console.warn('[loadManualSeasonOptions]',e);
+        });
+    }
+    loadManualSeasonOptions();
     function loadManualQueue(){
       if(!queueList)return;
       fetch('/api/manual-queue',{credentials:'include'})
