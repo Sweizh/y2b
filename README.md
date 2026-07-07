@@ -176,8 +176,15 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 
 ### 步骤 7：填写配置
 
-1. 后台填写 B 站 Cookie（4 个字段：SESSDATA / bili_jct / buvid3 / ac_time_value）
-2. 填写 YouTube API Key（用于频道搜索，可选）
+1. **B 站登录**: 点击「弹窗登录 B 站」按钮,流程如下:
+   - 弹窗打开 bilibili.com 登录页,用户正常登录(账号密码/扫码均可)
+   - 登录成功后,在 B 站页面按 F12 打开 Console,粘贴页面提供的代码并回车
+   - 代码会自动复制 `document.cookie` 到剪贴板
+   - 回到 YT2BILI 控制台,粘贴 cookie 到输入框,点「保存 Cookie」
+   - 后端解析 SESSDATA/bili_jct/buvid3,加密存入 KV
+   - **为什么不直接 Worker 代理登录**: B 站 passport 端点对 Cloudflare Worker IP 严格风控,即使带 buvid3 也返回 `code -412 "request was banned"`
+   - **为什么不用 window.opener.postMessage**: B 站跨域弹窗,浏览器会丢失 opener(COOP 或移动端限制),只能改用剪贴板中转
+2. 填写 YouTube API Key(用于频道搜索,可选),或点「OAuth 登录 YouTube」用 Google 账号授权
 3. 填写 ASR API + 翻译 API
 4. 填写 GitHub Token + 仓库
 5. 每项填完点「测试」按钮验证连通性
@@ -306,6 +313,7 @@ npm run deploy
 | GET/DELETE | `/api/processed[/:videoId]` | 已处理视频 |
 | GET/POST/DELETE | `/api/manual-queue[/:videoId]` | 手动视频队列 |
 | POST | `/api/test/bili` | 测试 B 站 Cookie |
+| POST | `/api/bili/login/cookie` | 提交 B 站 cookie 字符串(弹窗登录方案) |
 | POST | `/api/test/asr` | 测试 ASR API |
 | POST | `/api/test/translate` | 测试翻译 API |
 | POST | `/api/test/github` | 测试 GitHub Token |
