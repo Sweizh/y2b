@@ -23,6 +23,15 @@ const BILI_FINGER_SPIDE = 'https://api.bilibili.com/x/frontend/finger/spide';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// B 站 passport 端点需要的请求头(缺少 Referer/Origin 时可能返回 HTML 错误页)
+const BILI_PASSPORT_HEADERS: Record<string, string> = {
+  'User-Agent': UA,
+  'Referer': 'https://www.bilibili.com/',
+  'Origin': 'https://www.bilibili.com',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+};
+
 function log(event: string, status: string, extra: Record<string, any> = {}) {
   console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, status, ...extra }));
 }
@@ -38,8 +47,17 @@ app.get('/qrcode', async (c) => {
   const start = Date.now();
   try {
     const resp = await fetch(BILI_QRCODE_URL, {
-      headers: { 'User-Agent': UA },
+      headers: BILI_PASSPORT_HEADERS,
+      // 不自动跟随重定向(B 站可能 302 到 HTML 登录页)
+      redirect: 'manual',
     });
+    // 检查响应是否为 JSON,避免 HTML 解析报错
+    const ct = resp.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      const body = await resp.text();
+      log('bili_qrcode', 'failed', { requestId, status: resp.status, contentType: ct, bodyPreview: body.slice(0, 200) });
+      return c.json({ error: `B 站返回非 JSON(status=${resp.status}, type=${ct})` }, 502);
+    }
     const data = await resp.json() as any;
     if (data.code !== 0) {
       log('bili_qrcode', 'failed', { requestId, code: data.code, message: data.message });
@@ -71,8 +89,16 @@ app.get('/qrcode/status', async (c) => {
   }
   try {
     const resp = await fetch(`${BILI_QRCODE_INFO}?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
-      headers: { 'User-Agent': UA },
+      headers: BILI_PASSPORT_HEADERS,
+      redirect: 'manual',
     });
+    // 检查响应是否为 JSON
+    const ct = resp.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      const body = await resp.text();
+      log('bili_qrcode_status', 'failed', { requestId, status: resp.status, contentType: ct, bodyPreview: body.slice(0, 200) });
+      return c.json({ status: 'error', message: `B 站返回非 JSON(status=${resp.status})` });
+    }
     const data = await resp.json() as any;
     // poll 接口返回结构: {"code":0,"data":{"code":86101,"url":"","message":"未扫码"}}
     //   - 顶层 code: 0=HTTP 请求成功(不代表登录成功)
