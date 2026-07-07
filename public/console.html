@@ -894,6 +894,90 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     return {close:close};
   }
 
+  // ===== 配置字段获取方式帮助 =====
+  function showHelp(title, html){
+    var overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;animation:modal-fade .18s ease';
+    var dialog=document.createElement('div');
+    dialog.style.cssText='background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;max-width:560px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-2xl)';
+    var head=document.createElement('div');
+    head.style.cssText='display:flex;justify-content:space-between;align-items:center;margin:0 0 16px';
+    var h=document.createElement('h3');
+    h.style.cssText='font-size:16px;font-weight:600;margin:0';
+    h.textContent=title;
+    var closeIcon=document.createElement('button');
+    closeIcon.innerHTML='&times;';
+    closeIcon.style.cssText='background:none;border:none;font-size:24px;cursor:pointer;color:var(--apple-muted-foreground);padding:0;line-height:1;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px';
+    closeIcon.onmouseenter=function(){closeIcon.style.background='var(--apple-secondary)';};
+    closeIcon.onmouseleave=function(){closeIcon.style.background='none';};
+    head.appendChild(h);head.appendChild(closeIcon);
+    var body=document.createElement('div');
+    body.style.cssText='font-size:13px;line-height:1.7;color:var(--apple-muted-foreground)';
+    body.innerHTML=html;
+    body.querySelectorAll('a').forEach(function(a){
+      a.style.color='var(--brand-500)';
+      a.target='_blank';
+      a.rel='noopener noreferrer';
+      a.style.textDecoration='underline';
+    });
+    body.querySelectorAll('code').forEach(function(c){
+      c.style.cssText='background:var(--apple-secondary);color:var(--apple-foreground);padding:1px 6px;border-radius:4px;font-family:var(--font-mono);font-size:12px;word-break:break-all';
+    });
+    dialog.appendChild(head);dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    function close(){if(overlay.parentNode)overlay.parentNode.removeChild(overlay);}
+    closeIcon.onclick=close;
+    overlay.onclick=function(e){if(e.target===overlay)close();};
+    document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',esc);}},{once:true});
+  }
+
+  var helpTexts={
+    'admin_password':{title:'管理密码 · 获取方式',html:'首次访问后台时设置的密码，用于登录管理后台。<br><br>如需重置：在 Cloudflare Dashboard → Workers & Pages → 你的 Worker → KV → 找到 <code>YT2BILI_KV</code> 命名空间 → 删除 <code>config</code> 键，然后重新访问域名初始化。'},
+    'bili_sessdata':{title:'B站 SESSDATA · 获取方式',html:'1. 在浏览器登录 <a href="https://www.bilibili.com">bilibili.com</a><br>2. 按 F12 打开开发者工具 → Application（应用程序）标签<br>3. 左侧 Storage → Cookies → <code>https://www.bilibili.com</code><br>4. 找到名为 <code>SESSDATA</code> 的 Cookie，复制 Value 列的值<br><br>注意：SESSDATA 有有效期，过期后需重新获取。系统检测到过期会自动尝试续期。'},
+    'bili_jct':{title:'B站 bili_jct · 获取方式',html:'同 SESSDATA 的获取方式，Cookie 名为 <code>bili_jct</code>（即 CSRF Token）。<br><br>1. 在 bilibili.com 登录<br>2. F12 → Application → Cookies → <code>https://www.bilibili.com</code><br>3. 找到 <code>bili_jct</code>，复制 Value'},
+    'bili_buvid3':{title:'B站 buvid3 · 获取方式',html:'同 SESSDATA 的获取方式，Cookie 名为 <code>buvid3</code>。<br><br>1. 在 bilibili.com 登录<br>2. F12 → Application → Cookies → <code>https://www.bilibili.com</code><br>3. 找到 <code>buvid3</code>，复制 Value'},
+    'ac_time_value':{title:'B站 ac_time_value · 获取方式',html:'用于 Cookie 自动续期。<br><br>1. 在 bilibili.com 登录后，访问 <a href="https://api.bilibili.com/x/web-interface/nav">nav 接口</a><br>2. 返回的 JSON 中找到 <code>data.wbi_img.img_url</code> 和 <code>data.wbi_img.sub_url</code><br>3. URL 路径中包含 <code>ac_time_value</code> 参数（形如 <code>ac_time_value=xxxxx</code>）<br>4. 复制该参数的值<br><br>系统会定期检查并自动续期，距过期不足 1 小时时触发刷新。'},
+    'yt_api_key':{title:'YouTube API Key · 获取方式',html:'1. 访问 <a href="https://console.cloud.google.com/">Google Cloud Console</a>，登录 Google 账号<br>2. 点击顶栏项目下拉 → 新建项目（或选择已有项目）<br>3. 左侧菜单 → APIs &amp; Services → Library → 搜索 <code>YouTube Data API v3</code> → 点击 Enable<br>4. 左侧菜单 → APIs &amp; Services → Credentials → Create Credentials → API Key<br>5. 复制生成的 API Key（以 <code>AIza</code> 开头）<br><br>用于频道搜索功能。不配置时频道搜索不可用，但不影响已关注频道的自动投稿。'},
+    'yt_cookies':{title:'YouTube Cookie · 获取方式',html:'用于 yt-dlp 绕过年龄限制等。<br><br>1. 在浏览器登录 <a href="https://www.youtube.com">youtube.com</a><br>2. F12 → Application → Cookies → <code>https://www.youtube.com</code><br>3. 复制以下字段的值，拼接成 <code>key=value; key=value</code> 格式：<br>　• <code>VISITOR_INFO1_LIVE</code><br>　• <code>HSID</code><br>　• <code>SSID</code><br>　• <code>SID</code>（可选）<br><br>示例：<code>VISITOR_INFO1_LIVE=xxx; HSID=xxx; SSID=xxx</code>'},
+    'gh_token':{title:'GitHub Token · 获取方式',html:'1. 访问 <a href="https://github.com/settings/tokens">GitHub Settings → Tokens</a><br>2. 点击 Generate new token → Generate new token (classic)<br>3. Note 填写用途（如 <code>yt2bili-trigger</code>），Expiration 选择有效期<br>4. 勾选 <code>repo</code> 权限（用于触发 workflow_dispatch 事件）<br>5. 点击 Generate token<br>6. 复制生成的 token（以 <code>ghp_</code> 开头）<br><br>注意：token 只在创建时显示一次，请妥善保存。如丢失需重新生成。'},
+    'gh_repo':{title:'GitHub 仓库 · 获取方式',html:'格式：<code>用户名/仓库名</code>，如 <code>Sweizh/y2b</code>。<br><br>这是存放 GitHub Actions workflow（<code>.github/workflows/process.yml</code>）的仓库。系统通过该仓库的 <code>repository_dispatch</code> 事件触发流水线运行 Python Runner。<br><br>如果你 fork 了本仓库，填写你 fork 后的仓库地址。'},
+    'asr_api':{title:'语音识别 API 地址 · 获取方式',html:'支持 OpenAI 兼容的 Chat Completions 格式。用于将视频音频转写为字幕。<br><br>常见服务商端点：<br>• OpenAI：<code>https://api.openai.com/v1/chat/completions</code><br>• Azure OpenAI：<code>https://你的资源名.openai.azure.com/openai/deployments/你的部署名/chat/completions?api-version=2024-02-15-preview</code><br>• 其他兼容服务商：填入对应的 chat completions 端点'},
+    'asr_key':{title:'语音识别 API 密钥 · 获取方式',html:'对应上方 API 地址的访问密钥（Bearer Token）。<br><br>• OpenAI：在 <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a> 创建，以 <code>sk-</code> 开头<br>• Azure OpenAI：在 Azure Portal → 你的 OpenAI 资源 → Keys and Endpoint 中复制 Key<br>• 其他服务商：对应控制台获取的 API Key<br><br>请求时作为 <code>Authorization: Bearer &lt;密钥&gt;</code> 头发送。'},
+    'translate_api':{title:'翻译 API 地址 · 获取方式',html:'支持 OpenAI 兼容的 Chat Completions 格式，用于翻译字幕。<br><br>常见服务商端点：<br>• OpenAI：<code>https://api.openai.com/v1/chat/completions</code><br>• 其他兼容服务商：填入对应的 chat completions 端点<br><br>可与语音识别 API 使用同一服务商，也可分别配置。'},
+    'translate_key':{title:'翻译 API 密钥 · 获取方式',html:'对应上方翻译 API 地址的访问密钥（Bearer Token）。<br><br>• OpenAI：在 <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a> 创建，以 <code>sk-</code> 开头<br>• 其他服务商：对应控制台获取的 API Key<br><br>请求时作为 <code>Authorization: Bearer &lt;密钥&gt;</code> 头发送。'}
+  };
+
+  var helpFieldMap={
+    '管理密码':'admin_password',
+    'B站 SESSDATA':'bili_sessdata','B站 bili_jct':'bili_jct',
+    'B站 buvid3':'bili_buvid3','B站 ac_time_value':'ac_time_value',
+    'YouTube API Key':'yt_api_key','YouTube Cookie':'yt_cookies',
+    'GitHub Token':'gh_token','GitHub 仓库':'gh_repo',
+    '语音识别 API 地址':'asr_api','语音识别 API 密钥':'asr_key',
+    '翻译 API 地址':'translate_api','翻译 API 密钥':'translate_key'
+  };
+
+  // 给配置项 label 旁插入「获取方式」按钮
+  document.querySelectorAll('#section-credentials label, #section-ai-services label').forEach(function(lbl){
+    var text=lbl.textContent.trim();
+    var key=helpFieldMap[text];
+    if(!key)return;
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.textContent='获取方式';
+    btn.style.cssText='font-size:10px;font-weight:500;color:var(--brand-500);background:none;border:none;cursor:pointer;padding:0;margin-left:6px;line-height:1';
+    btn.addEventListener('click',function(){
+      var h=helpTexts[key];
+      if(h)showHelp(h.title,h.html);
+    });
+    var wrapper=document.createElement('div');
+    wrapper.style.cssText='display:flex;align-items:center;gap:2px';
+    lbl.parentNode.insertBefore(wrapper,lbl);
+    wrapper.appendChild(lbl);
+    wrapper.appendChild(btn);
+  });
+
   // ===== 鉴权检查 =====
   fetch('/api/init-status',{credentials:'include'})
     .then(function(r){return r.json();})
