@@ -81,12 +81,13 @@ app.post('/login', async (c) => {
 // 登出
 app.post('/logout', async (c) => {
   const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  const start = Date.now();
   const sessionId = getSessionFromRequest(c.req.raw);
   if (sessionId) {
     await destroySession(c.env.YT2BILI_KV, sessionId);
   }
   c.header('Set-Cookie', getClearSessionCookieHeader());
-  log('logout', 'success', { requestId });
+  log('logout', 'success', { requestId, duration: Date.now() - start });
   return c.json({ success: true });
 });
 
