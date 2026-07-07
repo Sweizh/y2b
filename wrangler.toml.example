@@ -7,12 +7,15 @@ compatibility_date = "2024-12-01"
 [site]
 bucket = "./public"
 
-# 部署后将以下 KV 命名空间 ID 替换为你自己的（Cloudflare Dashboard → Workers & Pages → KV 创建）
-# 本地开发时 wrangler 会自动创建本地 KV 模拟，无需真实 ID
+# KV 命名空间绑定
+# id 通过环境变量引用(${VAR} 语法),避免 fork 仓库时 KV id 被覆盖
+# 本地开发:在 .dev.vars 文件中设置 CLOUDFLARE_KV_ID 和 CLOUDFLARE_KV_PREVIEW_ID
+# Cloudflare Dashboard Git 部署:在 Worker → Settings → Variables 中配置
+# 本地开发时 wrangler 会自动创建本地 KV 模拟,未设置环境变量时会回退到本地模拟
 [[kv_namespaces]]
 binding = "YT2BILI_KV"
-id = "local_kv_id_dev_only"
-preview_id = "local_kv_id_dev_only_preview"
+id = "${CLOUDFLARE_KV_ID}"
+preview_id = "${CLOUDFLARE_KV_PREVIEW_ID}"
 
 # 加密主密钥：执行 `wrangler secret put ENCRYPTION_KEY`，输入 32 字节随机字符串
 # 用于 AES-GCM 加密 KV 中存储的敏感字段（B 站 Cookie、API Key 等）

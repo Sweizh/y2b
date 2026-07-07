@@ -1,5 +1,16 @@
 # 本地开发环境变量示例
 # 复制为 .dev.vars 并修改值
+# 此文件会被 dotenv-cli 加载为构建时环境变量(用于 wrangler.toml 的 ${VAR})
+# 同时被 wrangler dev 加载为 Worker runtime 环境变量(c.env.VAR)
+
+# === 构建时变量(wrangler.toml 引用)==
+# KV 命名空间 ID
+# 从 Cloudflare Dashboard → Workers & Pages → KV → 你的命名空间 → 复制 ID
+# 本地开发时如果不设置,wrangler dev 会用本地 KV 模拟(数据不持久)
+CLOUDFLARE_KV_ID="your-kv-namespace-id"
+CLOUDFLARE_KV_PREVIEW_ID="your-kv-preview-id"
+
+# === 运行时变量(Worker 代码引用 c.env.VAR)==
 # 加密主密钥,任意长度字符串(经 SHA-256 派生为 32 字节 AES 密钥)
 # 生产环境用 `wrangler secret put ENCRYPTION_KEY` 注入
 ENCRYPTION_KEY="change-me-to-a-random-32-bytes-or-longer-string"

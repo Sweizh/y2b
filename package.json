@@ -5,13 +5,15 @@
   "description": "YouTube 到 Bilibili 自动化搬运系统",
   "main": "src/index.ts",
   "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "postinstall": "node scripts/setup.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail"
   },
   "dependencies": {
-    "hono": "^4.6.14",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "hono": "^4.6.14"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",
