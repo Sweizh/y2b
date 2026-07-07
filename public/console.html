@@ -1090,7 +1090,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.initialized){
-        location.href='登录.html';
+        location.href='login.html';
       }
     })
     .catch(function(){
@@ -1178,10 +1178,10 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           fetch('/api/logout',{method:'POST',credentials:'include'})
             .then(function(){
               localStorage.removeItem('y2b-initialized');
-              location.href='登录.html';
+              location.href='login.html';
             })
             .catch(function(){
-              location.href='登录.html';
+              location.href='login.html';
             });
         }
       });
