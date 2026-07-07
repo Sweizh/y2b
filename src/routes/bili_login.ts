@@ -7,8 +7,9 @@
 //   4. 后端在登录成功时解析 cookie 并加密写入 KV
 //
 // 关键 API:
-//   - 获取二维码: https://passport.bilibili.com/x/passport-login/web/qrcode/url
-//   - 查询状态:   https://passport.bilibili.com/x/passport-login/web/qrcode/info
+//   - 获取二维码: https://passport.bilibili.com/x/passport-login/web/qrcode/generate
+//   - 查询状态:   https://passport.bilibili.com/x/passport-login/web/qrcode/poll
+//                返回 {code:0, data:{code:86101|86090|86039, url?, message?}}
 
 import { Hono } from 'hono';
 import { getRawConfig, putConfig } from '../kv';
@@ -16,8 +17,8 @@ import { getRawConfig, putConfig } from '../kv';
 const app = new Hono<{ Bindings: Env }>();
 
 const BILI_NAV_URL = 'https://api.bilibili.com/x/web-interface/nav';
-const BILI_QRCODE_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/url';
-const BILI_QRCODE_INFO = 'https://passport.bilibili.com/x/passport-login/web/qrcode/info';
+const BILI_QRCODE_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate';
+const BILI_QRCODE_INFO = 'https://passport.bilibili.com/x/passport-login/web/qrcode/poll';
 const BILI_FINGER_SPIDE = 'https://api.bilibili.com/x/frontend/finger/spide';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -73,21 +74,18 @@ app.get('/qrcode/status', async (c) => {
       headers: { 'User-Agent': UA },
     });
     const data = await resp.json() as any;
-    const code = data.code;
-    // B 站返回码:
-    //   0     : 未扫码
-    //   86090 : 已扫码待确认
-    //   86090 + data.url : 已确认登录成功(url 含 crossDomain 跳转地址,带 cookie 参数)
-    //   86039 : 二维码已过期
-    //   -1    : 其他错误
-    if (code === 86039) {
-      return c.json({ status: 'expired', message: '二维码已过期' });
+    // poll 接口返回结构: {"code":0,"data":{"code":86101,"url":"","message":"未扫码"}}
+    //   - 顶层 code: 0=HTTP 请求成功(不代表登录成功)
+    //   - data.code: 真正的扫码状态码
+    //     86101 = 未扫码
+    //     86090 = 已扫码,且若 data.url 非空则表示已确认登录成功
+    //     86039 = 二维码已过期
+    const dataCode = data?.data?.code;
+    if (dataCode === 86101) {
+      return c.json({ status: 'waiting', message: data?.data?.message || '等待扫码' });
     }
-    if (code === 0) {
-      return c.json({ status: 'waiting', message: '等待扫码' });
-    }
-    if (code === 86090) {
-      // 检查 data.url 是否存在(存在表示已确认登录)
+    if (dataCode === 86090) {
+      // 已扫码。data.url 非空表示已确认登录(url 含 crossDomain 跳转地址,带 cookie 参数)
       const crossDomainUrl = data?.data?.url;
       if (!crossDomainUrl) {
         return c.json({ status: 'scanned', message: '已扫码,请在手机上确认' });
@@ -104,7 +102,10 @@ app.get('/qrcode/status', async (c) => {
         message: '登录成功',
       });
     }
-    return c.json({ status: 'error', message: data.message || `未知状态码 ${code}` });
+    if (dataCode === 86039) {
+      return c.json({ status: 'expired', message: '二维码已过期' });
+    }
+    return c.json({ status: 'error', message: data?.data?.message || `未知状态码 ${dataCode}` });
   } catch (e: any) {
     log('bili_qrcode_status', 'error', { requestId, error: e.message });
     return c.json({ status: 'error', message: '请求 B 站失败:' + (e.message || e) });
