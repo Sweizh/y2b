@@ -690,6 +690,9 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           </div>
         </div>
 
+        <!-- Cookie 状态提示(由 /api/status 的 cookie_status 字段驱动) -->
+        <div data-cookie-hint class="mb-5 text-sm" style="display:none"></div>
+
         <!-- Execute Now button -->
         <div class="mb-5">
           <button class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">立即执行</button>
@@ -1884,10 +1887,32 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
                 v3.textContent=ok?'正常运行':(d.system_status==='degraded'?'降级运行':'异常');
                 v3.style.background=ok?'var(--state-success-surface)':'var(--state-error-surface)';
                 v3.style.color=ok?'var(--state-success)':'var(--state-error)';
+                // 显示 Runner 上报的失败摘要(若有),便于管理员快速定位
+                if(d.error_summary){
+                  v3.title='失败摘要：'+d.error_summary;
+                }else{
+                  v3.title='';
+                }
               }else{
                 v3.textContent='--';
                 v3.style.background='var(--apple-secondary)';
                 v3.style.color='var(--apple-muted-foreground)';
+                v3.title='';
+              }
+            }
+            // Cookie 状态:显示在统计卡片下方
+            var cookieHint=statusSection.querySelector('[data-cookie-hint]');
+            if(cookieHint){
+              if(d.cookie_status==='expired'){
+                cookieHint.textContent='B 站 Cookie 已失效,请重新登录';
+                cookieHint.style.color='var(--state-error)';
+                cookieHint.style.display='';
+              }else if(d.cookie_status==='expiring'){
+                cookieHint.textContent='B 站 Cookie 即将过期,请尽快重登';
+                cookieHint.style.color='var(--state-warning,#d97706)';
+                cookieHint.style.display='';
+              }else{
+                cookieHint.style.display='none';
               }
             }
           }

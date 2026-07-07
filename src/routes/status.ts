@@ -29,6 +29,7 @@ app.get('/', async (c) => {
     total_processed: status.total_processed || Object.keys(processed).length,
     system_status: status.system_status || 'normal',
     cookie_status: status.cookie_status || 'unknown',
+    error_summary: status.error_summary || '',
     recent_records: recentRecords,
     pipeline_token_configured: !!cfg.pipeline_token,
     gh_repo: cfg.gh_repo || '',

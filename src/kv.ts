@@ -51,6 +51,9 @@ export interface ProcessedItem {
   stage?: string;            // 中断阶段
   message?: string;          // 失败原因
   processed_at: number;
+  // 视频已上传但字幕/合集追加失败时的非致命错误(供后续补传决策)
+  subtitle_error?: string;   // 字幕上传失败原因(视频已成功上传)
+  season_error?: string;    // 合集追加失败原因(视频已成功上传)
 }
 
 export interface ManualQueueItem {
@@ -77,7 +80,9 @@ export interface StatusRecord {
     processed_at: number;
   }>;
   system_status?: 'normal' | 'degraded' | 'error';
-  cookie_status?: 'ok' | 'expired' | 'unknown';
+  cookie_status?: 'ok' | 'expired' | 'expiring' | 'unknown';
+  // Runner 上报的失败摘要(本次运行的失败原因概述,如 "全部 3 个视频失败")
+  error_summary?: string;
 }
 
 const KEYS = {
@@ -113,7 +118,7 @@ function mask(value: string): string {
 
 export async function getRawConfig(kv: KVNamespace, encryptionKey: string): Promise<Config> {
   const raw = await kv.get(KEYS.config);
-  if (!raw) return {};
+  if (!raw) return {};  // 新装系统:无配置,合法
   try {
     const cfg = JSON.parse(raw) as Config;
     // 解密敏感字段
@@ -124,8 +129,13 @@ export async function getRawConfig(kv: KVNamespace, encryptionKey: string): Prom
       }
     }
     return result as Config;
-  } catch {
-    return {};
+  } catch (e) {
+    // 数据损坏或解密失败(如 ENCRYPTION_KEY 变更)
+    // 关键:不能返回空对象!否则 initialized 为 falsy,init 路由会允许重新初始化,
+    // 攻击者可重新设置 admin_password 接管系统(密码重置即等于账户接管)
+    // 这里强制返回 initialized=true,阻断重置路径,使管理员必须先手动清理 KV
+    console.error('[kv] config 数据损坏或解密失败,拒绝重新初始化:', e instanceof Error ? e.message : String(e));
+    return { initialized: true };
   }
 }
 
@@ -160,7 +170,8 @@ export async function getChannels(kv: KVNamespace): Promise<Channel[]> {
   if (!raw) return [];
   try {
     return JSON.parse(raw) as Channel[];
-  } catch {
+  } catch (e) {
+    console.error('[kv] channels 数据损坏,返回空列表:', e instanceof Error ? e.message : String(e));
     return [];
   }
 }
@@ -174,7 +185,8 @@ export async function getManualQueue(kv: KVNamespace): Promise<ManualQueueItem[]
   if (!raw) return [];
   try {
     return JSON.parse(raw) as ManualQueueItem[];
-  } catch {
+  } catch (e) {
+    console.error('[kv] manual_queue 数据损坏,返回空列表:', e instanceof Error ? e.message : String(e));
     return [];
   }
 }
@@ -188,7 +200,8 @@ export async function getProcessed(kv: KVNamespace): Promise<Record<string, Proc
   if (!raw) return {};
   try {
     return JSON.parse(raw) as Record<string, ProcessedItem>;
-  } catch {
+  } catch (e) {
+    console.error('[kv] processed 数据损坏,返回空表(已处理视频可能被重复处理):', e instanceof Error ? e.message : String(e));
     return {};
   }
 }
@@ -212,7 +225,8 @@ export async function getStatus(kv: KVNamespace): Promise<StatusRecord> {
   if (!raw) return { system_status: 'normal', recent_records: [] };
   try {
     return JSON.parse(raw) as StatusRecord;
-  } catch {
+  } catch (e) {
+    console.error('[kv] status 数据损坏,返回默认状态:', e instanceof Error ? e.message : String(e));
     return { system_status: 'normal', recent_records: [] };
   }
 }

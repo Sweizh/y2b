@@ -67,7 +67,12 @@ app.get('/search', async (c) => {
     });
     return c.json({ channels });
   } catch (e: any) {
-    return c.json({ error: '请求 YouTube 失败：' + (e.message || e) }, 502);
+    // fetch 抛错时 e.message 可能含完整 URL(含 ?key=<API_KEY>),
+    // 不能直接返回客户端,否则 API Key 泄露
+    const msg = String(e && (e.message || e)) || 'unknown';
+    const safe = msg.includes('key=') ? '请求 YouTube 失败(URL 含敏感参数,已隐藏详情)' : '请求 YouTube 失败：' + msg;
+    console.error('[youtube] search failed:', msg);
+    return c.json({ error: safe }, 502);
   }
 });
 
