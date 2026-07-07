@@ -177,13 +177,15 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 ### 步骤 7：填写配置
 
 1. **B 站登录**: 点击「弹窗登录 B 站」按钮,流程如下:
-   - 弹窗打开 bilibili.com 登录页,用户正常登录(账号密码/扫码均可)
-   - 登录成功后,在 B 站页面按 F12 打开 Console,粘贴页面提供的代码并回车
-   - 代码会自动复制 `document.cookie` 到剪贴板
-   - 回到 YT2BILI 控制台,粘贴 cookie 到输入框,点「保存 Cookie」
+   - 弹窗打开 `passport.bilibili.com/login`,用户正常登录(账号密码/扫码均可)
+   - 登录成功后,在 B 站任意页面按 F12 打开开发者工具
+   - 切到 **Network**(网络)标签,刷新页面(F5)
+   - 点击任意请求(如 `nav`),在右侧 Headers → Request Headers 中找到 `cookie:` 行
+   - 右键复制 cookie 值(整行值,包含 SESSDATA 等所有字段)
+   - 回到 YT2BILI 控制台,粘贴到输入框,点「保存 Cookie」
    - 后端解析 SESSDATA/bili_jct/buvid3,加密存入 KV
    - **为什么不直接 Worker 代理登录**: B 站 passport 端点对 Cloudflare Worker IP 严格风控,即使带 buvid3 也返回 `code -412 "request was banned"`
-   - **为什么不用 window.opener.postMessage**: B 站跨域弹窗,浏览器会丢失 opener(COOP 或移动端限制),只能改用剪贴板中转
+   - **为什么不能从 Console 复制 `document.cookie`**: B 站的 SESSDATA 是 HttpOnly,JS 读不到,只能从 Network 面板的请求头复制完整 cookie
 2. 填写 YouTube API Key(用于频道搜索,可选),或点「OAuth 登录 YouTube」用 Google 账号授权
 3. 填写 ASR API + 翻译 API
 4. 填写 GitHub Token + 仓库

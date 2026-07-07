@@ -2426,21 +2426,18 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       });
   }
 
-  // ===== B 站弹窗登录(用户侧浏览器登录 + 剪贴板复制 cookie 回传) =====
+  // ===== B 站弹窗登录(用户侧浏览器登录 + 从 Network 面板复制 cookie 回传) =====
   // 为什么用这个方案: B 站 passport 端点对 Cloudflare Worker IP 严格风控,
   // Worker 代理 QR 登录会被 ban(code -412),只能让用户浏览器直接登录 B 站
-  // 为什么不用 window.opener.postMessage: B 站跨域弹窗,浏览器会丢失 opener
-  //   (Cross-Origin-Opener-Policy 或移动端浏览器限制),postMessage 报错
-  // 改用剪贴板方案: 用户在 B 站页面执行 JS 复制 cookie,回主窗口粘贴提交
+  // 为什么不从 Console 复制 document.cookie: SESSDATA 是 HttpOnly,
+  //   document.cookie 读不到 SESSDATA,只能拿到 bili_jct 等非 HttpOnly 字段
+  // 改用从 Network 面板复制请求头 cookie: 请求头会包含完整 cookie(含 HttpOnly)
   function openBiliPopupLogin(){
-    var popup=window.open('https://www.bilibili.com/login','bili-login-popup','width=1024,height=700');
-    // 用户需在 B 站页面控制台粘贴的代码片段(复制 document.cookie 到剪贴板)
-    // 用 textarea + execCommand 兼容性最好(移动端、非 HTTPS、eruda 等都能工作)
-    var snippet="var t=document.createElement('textarea');t.value=document.cookie;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);alert('Cookie 已复制到剪贴板,请回到 YT2BILI 控制台粘贴');";
+    var popup=window.open('https://passport.bilibili.com/login','bili-login-popup','width=1024,height=700');
     var overlay=document.createElement('div');
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;animation:modal-fade .18s ease';
     var dialog=document.createElement('div');
-    dialog.style.cssText='background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;max-width:480px;width:100%;box-shadow:var(--shadow-2xl);max-height:90vh;overflow-y:auto';
+    dialog.style.cssText='background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;max-width:520px;width:100%;box-shadow:var(--shadow-2xl);max-height:90vh;overflow-y:auto';
     var title=document.createElement('h3');
     title.style.cssText='font-size:16px;font-weight:600;margin:0 0 12px';
     title.textContent='弹窗登录 B 站';
@@ -2448,40 +2445,28 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     steps.style.cssText='font-size:13px;line-height:1.7;margin:0 0 12px;padding-left:20px;color:var(--apple-foreground)';
     steps.innerHTML='<li>在弹出的窗口中正常登录 B 站(账号密码/扫码均可)</li>'+
       '<li>登录成功后,在 B 站任意页面按 <kbd>F12</kbd> 打开开发者工具</li>'+
-      '<li>切到 <kbd>Console</kbd> 标签,粘贴下方代码并回车(cookie 自动复制到剪贴板)</li>'+
-      '<li>回到本窗口,在下方输入框粘贴 cookie(<kbd>Ctrl/Cmd+V</kbd>),点「保存」</li>';
-    var codeBox=document.createElement('textarea');
-    codeBox.readOnly=true;
-    codeBox.value=snippet;
-    codeBox.style.cssText='width:100%;height:70px;font-family:var(--font-mono);font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--apple-border);background:var(--apple-muted);color:var(--apple-foreground);resize:none;margin-bottom:8px';
-    codeBox.onclick=function(){codeBox.select();document.execCommand('copy');showToast('代码已复制','success');};
-    var copyBtn=document.createElement('button');
-    copyBtn.textContent='复制代码';
-    copyBtn.style.cssText='height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:12px;margin-right:8px';
-    copyBtn.onclick=function(){
-      try{
-        navigator.clipboard.writeText(snippet).then(function(){showToast('代码已复制,请粘贴到 B 站页面 Console','success');},function(){codeBox.select();document.execCommand('copy');showToast('代码已复制','success');});
-      }catch(e){codeBox.select();document.execCommand('copy');showToast('代码已复制','success');}
-    };
+      '<li>切到 <kbd>Network</kbd>(网络)标签,刷新页面(F5)</li>'+
+      '<li>点击列表中任意一个请求(如 <code>nav</code>、<code>index.html</code>)</li>'+
+      '<li>在右侧 <kbd>Headers</kbd> → <kbd>Request Headers</kbd> 中找到 <code>cookie:</code> 行,右键复制值</li>'+
+      '<li>回到本窗口,在下方输入框粘贴(<kbd>Ctrl/Cmd+V</kbd>),点「保存 Cookie」</li>';
+    var warn=document.createElement('div');
+    warn.style.cssText='background:var(--apple-muted);border-left:3px solid var(--state-warning);padding:8px 12px;margin:0 0 12px;font-size:12px;color:var(--apple-foreground);border-radius:4px;line-height:1.5';
+    warn.innerHTML='<b>注意:</b> 不要从 Console 执行 <code>document.cookie</code> 复制! B 站的 <code>SESSDATA</code> 是 <b>HttpOnly</b>,JS 读不到,只能从 Network 面板的请求头复制完整 cookie。';
     var reopenBtn=document.createElement('button');
     reopenBtn.textContent='重开登录窗';
-    reopenBtn.style.cssText='height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:12px';
+    reopenBtn.style.cssText='height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:12px;margin-bottom:12px';
     reopenBtn.onclick=function(){
       try{popup.close();}catch(e){}
-      popup=window.open('https://www.bilibili.com/login','bili-login-popup','width=1024,height=700');
+      popup=window.open('https://passport.bilibili.com/login','bili-login-popup','width=1024,height=700');
       showToast('已重新打开 B 站登录页','info');
     };
-    var btnRow=document.createElement('div');
-    btnRow.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px';
-    btnRow.appendChild(copyBtn);
-    btnRow.appendChild(reopenBtn);
     // cookie 粘贴输入框
     var pasteLabel=document.createElement('label');
-    pasteLabel.textContent='在此粘贴 cookie 字符串:';
+    pasteLabel.textContent='在此粘贴从 Network 面板复制的 cookie 字符串:';
     pasteLabel.style.cssText='display:block;font-size:13px;font-weight:500;margin-bottom:4px;color:var(--apple-foreground)';
     var pasteBox=document.createElement('textarea');
-    pasteBox.placeholder='粘贴此处(形如 SESSDATA=xxx; bili_jct=xxx; buvid3=xxx; ...)';
-    pasteBox.style.cssText='width:100%;height:90px;font-family:var(--font-mono);font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--apple-border);background:var(--background-50);color:var(--apple-foreground);resize:vertical;margin-bottom:8px';
+    pasteBox.placeholder='粘贴此处(形如 SESSDATA=xxx,%2C...; bili_jct=xxx; buvid3=xxx; ...)';
+    pasteBox.style.cssText='width:100%;height:100px;font-family:var(--font-mono);font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--apple-border);background:var(--background-50);color:var(--apple-foreground);resize:vertical;margin-bottom:8px';
     pasteBox.onclick=function(){pasteBox.select();};
     var statusP=document.createElement('p');
     statusP.style.cssText='font-size:13px;margin:8px 0 4px;min-height:18px;color:var(--apple-muted-foreground)';
@@ -2497,11 +2482,11 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     actionRow.appendChild(closeBtn);
     var tip=document.createElement('p');
     tip.style.cssText='font-size:11px;margin:12px 0 0;color:var(--apple-muted-foreground);line-height:1.5';
-    tip.innerHTML='提示: B 站封禁了 Worker 服务器 IP,只能由你的浏览器登录后复制 cookie 回传。cookie 仅含 SESSDATA/bili_jct/buvid3,加密存储于 KV。<br>移动端可用 eruda 等 console 工具执行代码。';
+    tip.innerHTML='提示: B 站封禁了 Worker 服务器 IP,只能由你的浏览器登录后复制 cookie 回传。cookie 仅含 SESSDATA/bili_jct/buvid3,加密存储于 KV。<br>移动端浏览器若无法打开 F12,可用 via 浏览器或 PC 模式访问。';
     dialog.appendChild(title);
     dialog.appendChild(steps);
-    dialog.appendChild(codeBox);
-    dialog.appendChild(btnRow);
+    dialog.appendChild(warn);
+    dialog.appendChild(reopenBtn);
     dialog.appendChild(pasteLabel);
     dialog.appendChild(pasteBox);
     dialog.appendChild(statusP);
@@ -2519,8 +2504,13 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         statusP.style.color='var(--state-error)';
         return;
       }
-      if(cookieStr.indexOf('SESSDATA=')<0||cookieStr.indexOf('bili_jct=')<0){
-        statusP.textContent='cookie 中缺少 SESSDATA 或 bili_jct,请确认已登录 B 站';
+      if(cookieStr.indexOf('SESSDATA=')<0){
+        statusP.textContent='cookie 中缺少 SESSDATA。请确认从 Network 面板的请求头复制(非 Console 的 document.cookie)';
+        statusP.style.color='var(--state-error)';
+        return;
+      }
+      if(cookieStr.indexOf('bili_jct=')<0){
+        statusP.textContent='cookie 中缺少 bili_jct,请确认已登录 B 站';
         statusP.style.color='var(--state-error)';
         return;
       }
@@ -2564,7 +2554,6 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     closeBtn.onclick=cleanup;
     overlay.onclick=function(e){if(e.target===overlay)cleanup();};
     document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){cleanup();document.removeEventListener('keydown',esc);}},{once:true});
-    // 自动聚焦到粘贴框,方便用户直接 Ctrl+V
     setTimeout(function(){pasteBox.focus();},100);
   }
 
