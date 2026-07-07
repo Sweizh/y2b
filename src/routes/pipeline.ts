@@ -114,6 +114,10 @@ app.post('/processed', async (c) => {
       stage: r.stage || '',
       message: r.message || '',
       processed_at: now,
+      // 视频上传成功但字幕/合集失败:记录错误原因,供后续补传决策
+      // 注意:status 仍为 success(视频已上线),这些是非致命错误
+      subtitle_error: typeof r.subtitle_error === 'string' ? r.subtitle_error.slice(0, 500) : undefined,
+      season_error: typeof r.season_error === 'string' ? r.season_error.slice(0, 500) : undefined,
     };
     processed[r.video_id] = item;
     // 处理 manual_queue 清理逻辑
@@ -141,26 +145,45 @@ app.post('/processed', async (c) => {
     }
   }
   // 更新状态记录
-  const newRecords = results.map(r => ({
-    channel: r.channel || '',
-    video_title: r.title || '',
-    status: r.status === 'success' ? 'success' as const : 'failed' as const,
-    stage: r.stage || '',
-    message: r.message || '',
-    processed_at: now,
-  }));
+  // 对于"视频上传成功但字幕/合集失败"的情况,把非致命错误拼到 message 中展示
+  const newRecords = results.map(r => {
+    let msg = r.message || '';
+    if (r.status === 'success') {
+      const parts: string[] = [];
+      if (r.subtitle_error) parts.push('字幕失败: ' + r.subtitle_error);
+      if (r.season_error) parts.push('合集失败: ' + r.season_error);
+      if (parts.length) msg = (msg ? msg + ' | ' : '') + parts.join(' | ');
+    }
+    return {
+      channel: r.channel || '',
+      video_title: r.title || '',
+      status: r.status === 'success' ? 'success' as const : 'failed' as const,
+      stage: r.stage || '',
+      message: msg,
+      processed_at: now,
+    };
+  });
   status.recent_records = [...newRecords, ...(status.recent_records || [])].slice(0, 100);
   status.last_run_at = now;
   status.total_processed = (status.total_processed || 0) + results.filter(r => r.status === 'success').length;
-  // Cookie 状态
-  const hasCookieError = results.some(r =>
-    r.message && r.message.includes('Cookie')
-  );
+  // Cookie 状态:匹配 B 站常见的 Cookie/登录失效错误特征(中文 + 错误码 + 英文)
+  // 原 "Cookie" 字符串匹配太窄,B 站 API 报错多为 "账号未登录" / "-101" 等
+  const cookieErrorPatterns = [
+    'cookie', 'sessdata', '未登录', '账号未登录', '登录失效', '登录已失效',
+    'credential', 'csrf', '鉴权', '权限不足', '-101', '-111',
+  ];
+  const hasCookieError = results.some(r => {
+    const msg = (r.message || '').toLowerCase();
+    return cookieErrorPatterns.some(p => msg.includes(p));
+  });
   if (hasCookieError) {
     status.cookie_status = 'expired';
     status.system_status = 'degraded';
   } else {
-    status.cookie_status = 'ok';
+    // 不覆盖 'expiring'(由 Runner 通过 /status 主动上报)
+    if (status.cookie_status !== 'expiring') {
+      status.cookie_status = 'ok';
+    }
     status.system_status = results.some(r => r.status !== 'success') ? 'degraded' : 'normal';
   }
   // 顺序写入:先 processed(最重要,防重复处理),再 manual_queue,最后 status
@@ -189,10 +212,31 @@ app.post('/status', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const existing = await getStatus(c.env.YT2BILI_KV);
   // 只允许 Runner 更新这些字段;total_processed 由 /processed 累加,不接受 Runner 覆盖
-  const allowedFields = ['system_status', 'cookie_status', 'last_run_at'];
+  // error_summary:Runner 上报的失败概述(如 "全部 3 个视频失败"),供控制台展示
+  const allowedFields = ['system_status', 'cookie_status', 'last_run_at', 'error_summary'];
   const updated: StatusRecord = { ...existing };
   for (const f of allowedFields) {
-    if (body[f] !== undefined) (updated as any)[f] = body[f];
+    if (body[f] === undefined) continue;
+    if (f === 'error_summary') {
+      // error_summary 限长 500,防止 Runner 写入超大内容
+      (updated as any)[f] = typeof body[f] === 'string' ? body[f].slice(0, 500) : '';
+      continue;
+    }
+    if (f === 'cookie_status') {
+      // 严重度合并:不降级 'expired' 为 'expiring'/'ok'
+      // 'expired'(上传报错)> 'expiring'(ac_time 即将到期)> 'ok' > 'unknown'
+      const incoming = body[f];
+      const current = updated.cookie_status;
+      const severity: Record<string, number> = { unknown: 0, ok: 1, expiring: 2, expired: 3 };
+      const incSev = severity[incoming] ?? 0;
+      const curSev = severity[current || 'unknown'] ?? 0;
+      // 只在传入更严重或相等时更新(避免 Runner 末尾的 'expiring' 覆盖 /processed 的 'expired')
+      if (incSev >= curSev) {
+        updated.cookie_status = incoming;
+      }
+      continue;
+    }
+    (updated as any)[f] = body[f];
   }
   updated.last_run_at = body.last_run_at || Date.now();
   await putStatus(c.env.YT2BILI_KV, updated);

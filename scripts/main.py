@@ -17,12 +17,12 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import requests
 
@@ -30,6 +30,22 @@ import requests
 WORKER_URL = os.environ.get("WORKER_URL", "").rstrip("/")
 PIPELINE_TOKEN = os.environ.get("PIPELINE_TOKEN", "")
 MAX_VIDEOS_PER_CHANNEL = 5  # 每个频道每次最多处理视频数
+
+# 模块级关闭标志:SIGTERM 处理器设置,main 的 finally 检查
+_shutdown_reason = ""
+
+
+def _handle_sigterm(signum, frame):
+    """SIGTERM 处理器:GitHub Actions 超时会发 SIGTERM,
+    Python 默认 disposition 直接终止进程,不执行 finally 块,
+    导致 main() 的状态回写(_writeback_final_status)被跳过。
+
+    这里抛 SystemExit(SystemExit 是 BaseException 子类,不被 except Exception 捕获,
+    会直达 finally)以触发 main 的 finally 块回写状态。
+    """
+    global _shutdown_reason
+    _shutdown_reason = "SIGTERM received (likely GitHub Actions timeout)"
+    raise SystemExit(_shutdown_reason)
 
 
 def log(event: str, status: str, **extra):
@@ -457,12 +473,11 @@ def process_video(video_id: str, cfg: dict, channel: dict = None) -> dict:
 
         if subtitle_mode == "both":
             # 真正的双语字幕:单文件,每条 content = 中文 + 换行 + 原文
-            origin_lang = detect_origin_lang(srt_original)
+            # 注:detect_origin_lang 不在此调用——双语字幕统一用 zh-Hans(B 站不识别 ai-Zh)
             bilingual_path = os.path.join(work_dir, f"{video_id}.bilingual.srt")
             merged = merge_srt_bilingual(srt_translated, srt_original)
             with open(bilingual_path, "w", encoding="utf-8") as f:
                 f.write(merged)
-            # 双语用 zh-Hans(B 站不识别 ai-Zh)
             subtitle_files["zh-Hans"] = bilingual_path
         elif subtitle_mode == "translated":
             subtitle_files["zh-Hans"] = zh_path
@@ -632,8 +647,14 @@ def writeback_single(result: dict) -> bool:
 
 
 def main():
+    global _shutdown_reason
     system_status = "normal"
     error_summary = ""
+    cookie_expiring = False  # 默认未过期;try 块中根据 ac_time_value 更新
+
+    # GitHub Actions 超时会发 SIGTERM,Python 默认 disposition 直接终止进程,
+    # 不执行 finally 块。注册处理器抛 SystemExit 以触发 main 的 finally 回写状态。
+    signal.signal(signal.SIGTERM, _handle_sigterm)
 
     if not WORKER_URL or not PIPELINE_TOKEN:
         print("::error::WORKER_URL 或 PIPELINE_TOKEN 环境变量未配置", file=sys.stderr)
@@ -664,7 +685,9 @@ def main():
             processed=len(processed))
 
         # 2. Cookie 过期检查(仅告警,不回写空 Cookie)
-        if check_cookie_expiry(cfg):
+        # 同时记录 cookie_expiring 标志,在最终状态回写时上报给 Worker
+        cookie_expiring = check_cookie_expiry(cfg)
+        if cookie_expiring:
             log("cookie_check", "need_notify")
             notify_cookie_expiry(cfg)
 
@@ -768,6 +791,15 @@ def main():
         log("pipeline_done", "success" if fail_count == 0 else "partial",
             total=total, success=success_count, failed=fail_count)
 
+    except SystemExit as e:
+        # SIGTERM 处理器抛 SystemExit 触发到这里(Python 默认 SIGTERM 不执行 finally)
+        # 标记为 error,finally 块会回写状态让 Worker 感知本次运行被中断
+        if not error_summary:
+            error_summary = f"运行被中断: {str(e)[:200]}"
+        if system_status == "normal":
+            system_status = "error"
+        log("pipeline", "terminated", error=str(e)[:200])
+
     except Exception as e:
         # 任何未预期异常都走到这里(注意上面 raise 也会到这)
         if not error_summary:
@@ -778,17 +810,33 @@ def main():
 
     finally:
         # 无论成功失败都回写最终状态,Worker 才能感知本次运行结果
-        _writeback_final_status(system_status, error_summary)
+        # SIGTERM 触发的退出:覆盖状态为 error(GitHub Actions 超时等)
+        if _shutdown_reason:
+            system_status = "error"
+            if not error_summary:
+                error_summary = _shutdown_reason
+        # cookie_status:Runner 主动标记 expiring(ac_time_value 即将过期)
+        # 若 /processed 已标记 expired(上传报错),Worker 侧 /status 会保留更严重的 expired
+        cookie_status = "expiring" if cookie_expiring else "ok"
+        _writeback_final_status(system_status, error_summary, cookie_status)
 
 
-def _writeback_final_status(system_status: str, error_summary: str) -> None:
-    """回写最终运行状态到 Worker(无论成功失败)"""
+def _writeback_final_status(system_status: str, error_summary: str,
+                            cookie_status: str = "") -> None:
+    """回写最终运行状态到 Worker(无论成功失败)
+
+    cookie_status:Runner 主动上报的 Cookie 状态('expiring'/'ok'/''=不更新)。
+    Worker 侧 /status 会按严重度合并(不降级 'expired' 为 'expiring')。
+    """
     try:
-        worker_post("/api/pipeline/status", {
+        payload = {
             "last_run_at": int(time.time() * 1000),
             "system_status": system_status,
             "error_summary": error_summary,
-        })
+        }
+        if cookie_status:
+            payload["cookie_status"] = cookie_status
+        worker_post("/api/pipeline/status", payload)
     except Exception as e:
         log("status_writeback", "failed", error=str(e)[:200])
 

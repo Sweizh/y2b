@@ -7,7 +7,7 @@
 
 const ENC_PREFIX = 'enc:v1:';
 
-export async function deriveKey(encryptionKey: string): Promise<CryptoKey> {
+async function deriveKey(encryptionKey: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
   // 先用 SHA-256 派生 32 字节密钥(兼容任意长度的输入字符串)
   // 注:此处的派生用于将任意长度输入归一化为 32 字节,不是密码学 KDF
@@ -81,9 +81,4 @@ export async function decrypt(encrypted: string, encryptionKey: string): Promise
     // 抛错让上层决定降级策略(如清空凭证并告警),而非把密文当明文使用
     throw new Error('解密失败:密钥不匹配或密文损坏 (' + (e instanceof Error ? e.message : 'unknown') + ')');
   }
-}
-
-// 判断字符串是否是加密格式(带前缀)
-export function isEncrypted(s: string): boolean {
-  return !!s && s.startsWith(ENC_PREFIX);
 }
