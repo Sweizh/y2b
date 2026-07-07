@@ -6,10 +6,15 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 
 - **登录鉴权**：bcrypt 密码哈希 + HttpOnly Cookie Session
 - **凭证管理**：B 站 / YouTube / GitHub / ASR / 翻译 API 密钥，AES-GCM 加密存储，前端脱敏回显
-- **频道管理**：搜索 YouTube 频道 → 关注 → 配置合集/分区/标签/字幕模式
-- **运行状态**：上次运行时间、累计处理数、处理记录表（含状态色标）、立即触发流水线
-- **手动队列**：多行 URL 批量添加（支持完整 URL / 短链接 / 纯视频 ID）、删除二次确认
+- **频道管理**：搜索 YouTube 频道 → 关注 → 配置合集/分区/标签/字幕模式(4 选项:翻译字幕/原语言字幕/双语字幕/不上传)
+- **运行状态**：上次运行时间、累计处理数、处理记录表(含状态色标)、立即触发流水线、**已处理视频列表**(含删除触发重新处理)、**失败通知配置**(Webhook URL + 启用开关)
+- **手动队列**：多行 URL 批量添加(支持完整 URL / 短链接 / 纯视频 ID)、删除二次确认
 - **Pipeline API**：供 GitHub Actions Runner 调用，Bearer Token 鉴权
+- **GitHub Actions 流水线**：Worker `/api/trigger` 触发 `repository_dispatch` 事件,启动 `process.yml` 运行 Python Runner
+- **Python Runner**：yt-dlp 下载 → ffmpeg 提取音频 → ASR 转写 → 翻译字幕 → bilibili-api-python 上传 → 追加合集
+- **Cookie 自动续期**：检测 ac_time_value 距过期 < 1 小时自动调用 B 站刷新接口,新 Cookie 回写 Worker
+- **失败通知**：连续失败 ≥ 3 次调用 Webhook(支持企业微信/钉钉/Server酱)
+- **结构化日志**：Worker 关键路径输出 JSON 日志(requestId/event/status/duration),`wrangler tail` 可按字段过滤
 - **明暗主题**：跟随系统 / 记忆偏好
 
 ## 技术栈
@@ -22,14 +27,16 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 | 密码哈希 | bcryptjs |
 | 加密 | Web Crypto API (AES-GCM, SHA-256 派生密钥) |
 | 前端 | 原生 HTML + Tailwind CSS v4 (CDN) + Lucide Icons |
-| 部署 | wrangler |
+| CI/CD | GitHub Actions (`repository_dispatch` 触发) |
+| Runner | Python 3.11 + yt-dlp + ffmpeg + bilibili-api-python |
+| 部署 | wrangler / Cloudflare Dashboard Git 集成 |
 
 ## 项目结构
 
 ```
 y2b/
 ├── src/
-│   ├── index.ts              # Worker 入口，路由组装 + 鉴权中间件
+│   ├── index.ts              # Worker 入口，路由组装 + 鉴权中间件 + 结构化日志
 │   ├── env.d.ts              # Cloudflare Worker 环境类型
 │   ├── auth.ts               # Session / bcrypt / pipeline token
 │   ├── crypto.ts             # AES-GCM 加密
@@ -48,11 +55,18 @@ y2b/
 ├── public/
 │   ├── index.html            # 入口，自动跳转登录页或控制台
 │   ├── 登录.html
-│   └── 控制台.html
-├── wrangler.toml
+│   └── 控制台.html           # 含已处理视频列表 + 失败通知配置
+├── scripts/
+│   ├── main.py               # Python Runner 主流程(下载→转写→翻译→上传→回写)
+│   └── requirements.txt      # yt-dlp / bilibili-api-python / requests
+├── .github/
+│   └── workflows/
+│       └── process.yml       # GitHub Actions workflow(repository_dispatch 触发)
+├── wrangler.toml              # [site] + KV 配置
 ├── package.json
 ├── tsconfig.json
-└── .dev.vars                # 本地开发环境变量（不入库）
+├── .dev.vars.example          # 本地开发环境变量模板(入库)
+└── .dev.vars                  # 本地开发环境变量（不入库）
 ```
 
 ## 本地开发
@@ -295,6 +309,54 @@ KV Key 设计：
 | `status` | 运行状态（保留最近 100 条记录） | 中（每次执行 1 次） |
 | `session:*` | Session 记录（7 天 TTL） | 中（每次登录 + 校验） |
 
+## Python Runner 流程
+
+`scripts/main.py` 在 GitHub Actions 中运行,完整端到端流水线:
+
+```
+1. 拉取配置(GET /api/pipeline/config)
+   ├─ 全局配置(B 站凭证 / YouTube / ASR / 翻译 / GitHub / notify_webhook)
+   ├─ 启用的频道列表
+   ├─ 已处理视频去重表(processed)
+   └─ 手动队列(manual_queue)
+2. Cookie 续期检查
+   └─ ac_time_value 距过期 < 1 小时 → 调用 B 站 nav 接口刷新 → POST /api/pipeline/cookies 回写
+3. 遍历启用频道
+   ├─ yt-dlp 拉取频道最新 5 条视频
+   ├─ 过滤已在 processed 去重表中的 video_id
+   └─ 逐个处理(见下)
+4. 处理 manual_queue 中的视频(同上流程)
+5. 单视频处理流程
+   ├─ yt-dlp 下载视频 + 封面 + 字幕
+   ├─ ffmpeg 提取音频(mp3)
+   ├─ 调用 ASR API 转写音频 → SRT 字幕
+   ├─ 调用翻译 API 翻译字幕(按字幕模式:翻译/原语言/双语/不上传)
+   ├─ bilibili-api-python 上传视频(封面/标题/描述/标签/分区/字幕)
+   └─ 如配置了合集则追加到合集(season_id/section_id)
+6. 批量回写(POST /api/pipeline/processed)
+   ├─ 成功:从 manual_queue 移除
+   ├─ 可重试失败(网络/限流):保留 manual_queue,retry_count + 1,超过 3 次移除
+   └─ 不可重试失败:从 manual_queue 移除
+7. 失败通知
+   └─ 连续失败 ≥ 3 次且 notify_webhook 已配置 → 调用 Webhook(企业微信/钉钉/Server酱)
+```
+
+**单视频处理失败处理**:
+- 每步 try/except,记录 `stage`(download/asr/translate/upload)和 `message`
+- 可重试失败(网络/限流)保留在 manual_queue 等待下次运行
+- 不可重试失败(永久失败)直接清理 manual_queue
+
+**Cookie 续期**:
+- 检测 ac_time_value 距过期时间
+- < 1 小时触发续期流程
+- 续期成功后调用 `POST /api/pipeline/cookies` 回写新 Cookie
+- 续期失败不影响主流程,仅记日志
+
+**日志输出**:
+- Python Runner 输出结构化 JSON 日志,与 Worker 日志格式一致
+- 含 `timestamp`/`event`/`status`/`video_id`/`stage`/`duration` 字段
+- GitHub Actions 页面可查看完整运行记录
+
 ## 参考文档
 
 - [设计稿来源](https://blog.sweizh.top/post/y2b)
@@ -302,8 +364,11 @@ KV Key 设计：
 - [Cloudflare KV 文档](https://developers.cloudflare.com/kv/)
 - [Hono 框架](https://hono.dev/)
 - [GitHub REST API - Workflow Dispatch](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+- [GitHub Actions - repository_dispatch](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#repository_dispatch)
 - [bilibili-API-collect](https://sessionhu.github.io/bilibili-API-collect/)
 - [YouTube Data API v3](https://developers.google.com/youtube/v3/docs)
+- [yt-dlp 文档](https://github.com/yt-dlp/yt-dlp)
+- [bilibili-api-python](https://github.com/Nemo2011/bilibili-api-python)
 
 ## 安全说明
 
