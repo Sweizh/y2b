@@ -58,11 +58,11 @@ export interface ManualQueueItem {
   url?: string;
   title?: string;
   channel_config_id?: string;
-  config?: Partial<Channel>;
   added_at: number;
   status: 'pending' | 'processing' | 'retry';
   retry_count?: number;
   last_error?: string;
+  last_error_at?: number;  // 失败时间戳,供拉取侧做冷却判断
 }
 
 export interface StatusRecord {
@@ -88,6 +88,10 @@ const KEYS = {
   status: 'status',
 } as const;
 
+// 容量上限常量(KV value 上限 25MB,这里留足余量)
+const MAX_PROCESSED = 500;  // 去重表:保留最近 500 条(超出的老视频可能被重新处理)
+const MAX_STATUS_RECORDS = 100;  // 状态记录:保留最近 100 条
+
 // 敏感字段列表：存储时加密，读取时解密
 const SENSITIVE_FIELDS: (keyof Config)[] = [
   'bili_sessdata', 'bili_jct', 'bili_buvid3', 'ac_time_value',
@@ -95,14 +99,16 @@ const SENSITIVE_FIELDS: (keyof Config)[] = [
 ];
 
 // 脱敏字段列表：GET /api/config 返回时打码
+// 注意:pipeline_token 不在此列表,而是在 maskConfig 中直接删除
 const MASK_FIELDS: (keyof Config)[] = [
   'admin_password', 'bili_sessdata', 'bili_jct', 'bili_buvid3', 'ac_time_value',
   'yt_api_key', 'yt_cookies', 'gh_token', 'asr_key', 'translate_key',
 ];
 
+// 统一脱敏:固定返回 ****,不泄露明文片段(长度提示供前端判断是否已设置)
 function mask(value: string): string {
-  if (!value || value.length < 8) return '****';
-  return value.slice(0, 4) + '****' + value.slice(-4);
+  if (!value) return '';
+  return '****(已设置,' + value.length + '字符)';
 }
 
 export async function getRawConfig(kv: KVNamespace, encryptionKey: string): Promise<Config> {
@@ -142,8 +148,10 @@ export function maskConfig(cfg: Config): Config {
       masked[field] = mask(masked[field] as string);
     }
   }
-  // admin_password 完全不返回给前端
+  // admin_password / pipeline_token 完全不返回给前端
+  // pipeline_token 是 Runner 鉴权凭证,泄露可冒充 Runner 写回任意数据
   delete masked.admin_password;
+  delete masked.pipeline_token;
   return masked as Config;
 }
 
@@ -186,11 +194,13 @@ export async function getProcessed(kv: KVNamespace): Promise<Record<string, Proc
 }
 
 export async function putProcessed(kv: KVNamespace, processed: Record<string, ProcessedItem>): Promise<void> {
-  // 裁剪：保留最近 500 条
+  // 裁剪:保留最近 MAX_PROCESSED 条
+  // 注意:超出的老视频会从去重表中消失,下次被频道扫描拉到时可能被重新处理
   const entries = Object.entries(processed);
-  if (entries.length > 500) {
+  if (entries.length > MAX_PROCESSED) {
     entries.sort((a, b) => (b[1].processed_at || 0) - (a[1].processed_at || 0));
-    const trimmed = Object.fromEntries(entries.slice(0, 500));
+    const trimmed = Object.fromEntries(entries.slice(0, MAX_PROCESSED));
+    console.warn('[kv] processed 超出上限,截断 ' + (entries.length - MAX_PROCESSED) + ' 条(老视频可能被重新处理)');
     await kv.put(KEYS.processed, JSON.stringify(trimmed));
   } else {
     await kv.put(KEYS.processed, JSON.stringify(processed));
@@ -208,11 +218,11 @@ export async function getStatus(kv: KVNamespace): Promise<StatusRecord> {
 }
 
 export async function putStatus(kv: KVNamespace, status: StatusRecord): Promise<void> {
-  // 裁剪：保留最近 100 条
-  if (status.recent_records && status.recent_records.length > 100) {
+  // 裁剪:保留最近 MAX_STATUS_RECORDS 条
+  if (status.recent_records && status.recent_records.length > MAX_STATUS_RECORDS) {
     status.recent_records = status.recent_records
-      .sort((a, b) => b.processed_at - a.processed_at)
-      .slice(0, 100);
+      .sort((a, b) => (b.processed_at || 0) - (a.processed_at || 0))
+      .slice(0, MAX_STATUS_RECORDS);
   }
   await kv.put(KEYS.status, JSON.stringify(status));
 }

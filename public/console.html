@@ -457,8 +457,12 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       </a>
     </nav>
 
-    <!-- Logout -->
+    <!-- Logout & Theme -->
     <div class="px-3 pb-5 pt-3" style="border-top:1px solid var(--apple-border)">
+      <button data-dom-id="theme-toggle-btn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors duration-150 mb-2" style="color:var(--apple-muted-foreground);background:transparent">
+        <span id="theme-toggle-icon" style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:16px">🌙</span>
+        <span>切换主题</span>
+      </button>
       <button data-dom-id="logout-btn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors duration-150" style="color:var(--apple-muted-foreground);background:transparent">
         <span data-icon="arrow-left" style="width:18px;height:18px"></span>
         <span>退出登录</span>
@@ -642,7 +646,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         <!-- Search bar -->
         <div class="flex items-center gap-3 mb-5">
           <input type="text" placeholder="输入 YouTube 频道名称或 ID" class="flex-1 h-10 px-4 rounded-lg text-sm" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-          <button class="h-10 px-5 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">搜索频道</button>
+          <button data-dom-id="channel-search-btn" class="h-10 px-5 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">搜索频道</button>
         </div>
 
         <!-- Channel list (rendered by loadChannels) -->
@@ -811,7 +815,21 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
 <script>
   // ===== 控制台完整交互脚本 =====
-  // 主题初始化
+  // 主题初始化与切换
+  function getCurrentTheme(){
+    return document.documentElement.classList.contains('dark')?'dark':'light';
+  }
+  function setThemeToggleIcon(){
+    var icon=document.getElementById('theme-toggle-icon');
+    if(icon){icon.textContent=getCurrentTheme()==='dark'?'🌙':'☀️';}
+  }
+  function applyTheme(t){
+    var h=document.documentElement;
+    if(t==='light'){h.classList.remove('dark');h.setAttribute('data-theme','light');}
+    else{h.classList.add('dark');h.setAttribute('data-theme','dark');}
+    try{localStorage.setItem('y2b-theme',t);}catch(e){}
+    setThemeToggleIcon();
+  }
   (function(){
     try{
       var t=localStorage.getItem('y2b-theme');
@@ -821,6 +839,13 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       else{h.classList.add('dark');h.setAttribute('data-theme','dark');}
     }catch(e){}
   })();
+  setThemeToggleIcon();
+  var themeToggleBtn=document.querySelector('[data-dom-id="theme-toggle-btn"]');
+  if(themeToggleBtn){
+    themeToggleBtn.addEventListener('click',function(){
+      applyTheme(getCurrentTheme()==='dark'?'light':'dark');
+    });
+  }
 
   // Toast 容器
   (function(){
@@ -978,13 +1003,40 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     wrapper.appendChild(btn);
   });
 
+  // ===== 统一 API 封装 =====
+  // 401 自动跳登录;非 JSON 响应给出友好错误而非"网络错误"
+  function apiSafeJson(r){
+    if(r.status===401){
+      location.href='login.html';
+      return Promise.reject(new Error('未登录'));
+    }
+    var ct=r.headers.get('content-type')||'';
+    if(ct.indexOf('application/json')<0){
+      return r.text().then(function(t){
+        throw new Error('服务端返回非 JSON('+(r.status||'??')+')');
+      });
+    }
+    return r.json();
+  }
+  window.apiSafeJson=apiSafeJson;
+
   // ===== 鉴权检查 =====
+  // 1. 系统未初始化 -> 跳 login
+  // 2. 系统已初始化 -> 探测登录态(任意受保护接口 401 即跳登录)
   fetch('/api/init-status',{credentials:'include'})
-    .then(function(r){return r.json();})
+    .then(apiSafeJson)
     .then(function(d){
       if(!d.initialized){
         location.href='login.html';
+        return;
       }
+      // 探测登录态:GET /api/config 受保护,401 跳登录
+      fetch('/api/config',{credentials:'include'})
+        .then(apiSafeJson)
+        .then(function(){ /* 已登录,继续 */ })
+        .catch(function(){
+          location.href='login.html';
+        });
     })
     .catch(function(){
       // 后端不可用时仍然显示静态页面（开发模式）
@@ -1123,6 +1175,20 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             }
           });
         }
+        // 表单异步填充完成后,重新采集脏值检测快照,避免 setupSave 在 fetch 返回前采集空快照导致按钮永久启用
+        if(credSaveCtx&&credSaveCtx.resnapshot)credSaveCtx.resnapshot();
+        if(aiSaveCtx&&aiSaveCtx.resnapshot)aiSaveCtx.resnapshot();
+        // 同时回显失败通知配置(复用本次 /api/config 结果,避免二次 fetch)
+        var nSwitch=document.getElementById('notify-enabled');
+        var nUrlInput=document.getElementById('notify-webhook-url');
+        var nUrl=cfg.notify_webhook||'';
+        if(nUrl){
+          if(nSwitch)nSwitch.checked=true;
+          if(nUrlInput)nUrlInput.value=nUrl;
+          if(typeof setNotifySwitchUI==='function')setNotifySwitchUI(true);
+        }else{
+          if(typeof setNotifySwitchUI==='function')setNotifySwitchUI(false);
+        }
         return cfg;
       });
   }
@@ -1148,7 +1214,10 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     // 脏值检测
     var fields=Array.from(section.querySelectorAll('input,textarea'));
     var snapshot={};
-    fields.forEach(function(f,i){snapshot[i]=f.value;});
+    function collectSnapshot(){
+      fields.forEach(function(f,i){snapshot[i]=f.value;});
+    }
+    collectSnapshot();
     function isDirty(){
       for(var i=0;i<fields.length;i++){
         if(fields[i].value!==snapshot[i])return true;
@@ -1224,7 +1293,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         }else{
           showToast(successMsg||'已保存','success');
           // 更新 snapshot
-          fields.forEach(function(f,i){snapshot[i]=f.value;});
+          collectSnapshot();
           refresh();
         }
       })
@@ -1234,25 +1303,36 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       });
     });
     refresh();
+    // 暴露重新采集快照的接口,供异步填充表单(loadConfigToForm)完成后调用,避免空快照导致脏值检测失真
+    return {resnapshot:function(){collectSnapshot();refresh();}};
   }
 
-  setupSave(document.getElementById('section-credentials'),'/api/config','账号凭证已保存');
-  setupSave(document.getElementById('section-ai-services'),'/api/config','AI 服务接口已保存');
+  var credSaveCtx=setupSave(document.getElementById('section-credentials'),'/api/config','账号凭证已保存');
+  var aiSaveCtx=setupSave(document.getElementById('section-ai-services'),'/api/config','AI 服务接口已保存');
 
   // ===== 测试按钮 =====
-  // 给账号凭证区块每个「测试」按钮绑定对应 API
+  // 按字段 label 文本分发到对应测试端点;无对应端点的字段不绑定(按钮仅做 UI 占位)
   function bindTestButtons(){
     var credSection=document.getElementById('section-credentials');
     var aiSection=document.getElementById('section-ai-services');
 
-    // 账号凭证区：所有测试按钮统一调 /api/test/bili
+    // 账号凭证区:仅 B 站 5 个字段调 /api/test/bili;管理密码/YouTube/GitHub 无后端测试端点,改为提示
+    var biliFields=['B站 SESSDATA','B站 bili_jct','B站 buvid3','B站 ac_time_value'];
     if(credSection){
-      credSection.querySelectorAll('button').forEach(function(btn){
-        if(btn.textContent.trim()==='测试'){
+      credSection.querySelectorAll('.flex.flex-col').forEach(function(div){
+        var lbl=div.querySelector('label');
+        var btn=div.querySelector('button');
+        if(!lbl||!btn)return;
+        var lblText=lbl.textContent.trim();
+        // label 末尾可能有「获取方式」按钮文本,只取主文本
+        var mainText=lblText.split('获取方式')[0].trim();
+        var endpoint='';
+        if(biliFields.indexOf(mainText)>=0)endpoint='/api/test/bili';
+        if(endpoint){
           btn.addEventListener('click',function(){
             setBtnLoading(btn,true,'测试中…');
-            fetch('/api/test/bili',{method:'POST',credentials:'include'})
-              .then(function(r){return r.json();})
+            fetch(endpoint,{method:'POST',credentials:'include'})
+              .then(apiSafeJson)
               .then(function(d){
                 setBtnLoading(btn,false);
                 showToast(d.message||(d.success?'测试成功':'测试失败'),d.success?'success':'error');
@@ -1262,24 +1342,30 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
                 showToast('测试失败：'+(e.message||e),'error');
               });
           });
+        }else{
+          // 无对应测试端点的字段:点击提示用户
+          btn.addEventListener('click',function(){
+            showToast('该字段无独立测试端点,请保存后在实际运行中验证','info');
+          });
         }
       });
     }
-    // AI 服务区：根据字段调用不同端点
+    // AI 服务区:语音识别/翻译 各有独立端点
     if(aiSection){
       aiSection.querySelectorAll('.flex.flex-col').forEach(function(div){
         var lbl=div.querySelector('label');
         var btn=div.querySelector('button');
         if(!lbl||!btn)return;
         var lblText=lbl.textContent.trim();
+        var mainText=lblText.split('获取方式')[0].trim();
         var endpoint='';
-        if(lblText.indexOf('语音识别')>=0)endpoint='/api/test/asr';
-        else if(lblText.indexOf('翻译')>=0)endpoint='/api/test/translate';
+        if(mainText.indexOf('语音识别')>=0)endpoint='/api/test/asr';
+        else if(mainText.indexOf('翻译')>=0)endpoint='/api/test/translate';
         if(endpoint){
           btn.addEventListener('click',function(){
             setBtnLoading(btn,true,'测试中…');
             fetch(endpoint,{method:'POST',credentials:'include'})
-              .then(function(r){return r.json();})
+              .then(apiSafeJson)
               .then(function(d){
                 setBtnLoading(btn,false);
                 showToast(d.message||(d.success?'测试成功':'测试失败'),d.success?'success':'error');
@@ -1299,16 +1385,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   var channelsSection=document.getElementById('section-channels');
   if(channelsSection){
     var searchInput=channelsSection.querySelector('input[type="text"]');
-    var searchBtn=channelsSection.querySelector('button');
-    var isSearchBtn=function(b){return b.textContent.trim()==='搜索频道';};
-    channelsSection.querySelectorAll('button').forEach(function(b){
-      if(isSearchBtn(b.textContent.trim()))searchBtn=b;
-    });
-    // 重新查找：找到文本为「搜索频道」的按钮
-    var allBtns=channelsSection.querySelectorAll('button');
-    for(var i=0;i<allBtns.length;i++){
-      if(allBtns[i].textContent.trim()==='搜索频道'){searchBtn=allBtns[i];break;}
-    }
+    var searchBtn=channelsSection.querySelector('[data-dom-id="channel-search-btn"]');
     if(searchBtn && searchInput){
       searchBtn.addEventListener('click',function(){
         var q=searchInput.value.trim();
@@ -1616,7 +1693,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           '</div>'+
           '<div style="display:flex;align-items:center;justify-content:space-between">'+
             '<label style="font-size:12px;color:var(--apple-muted-foreground)">启用自动投稿</label>'+
-            '<div data-toggle-channel="'+cid+'" style="width:40px;height:20px;border-radius:9999px;background:'+toggleBg+';cursor:pointer;position:relative;transition:background .18s">'+
+            '<div data-toggle-channel="'+cid+'" data-enabled="'+(enabled?'1':'0')+'" style="width:40px;height:20px;border-radius:9999px;background:'+toggleBg+';cursor:pointer;position:relative;transition:background .18s">'+
               '<div style="position:absolute;top:2px;'+toggleKnob+';width:16px;height:16px;border-radius:9999px;background:var(--background-50);transition:left .18s,right .18s"></div>'+
             '</div>'+
           '</div>'+
@@ -1625,6 +1702,38 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           '<button data-save-channel="'+cid+'" style="height:32px;padding:0 16px;border-radius:6px;border:none;background:var(--brand-500);color:#fff;font-size:12px;font-weight:500;cursor:pointer">保存配置</button>'+
         '</div>';
       return card;
+    }
+
+    // 保存单张频道卡片配置;返回 Promise,resolve 为响应体(含 .error 字段时表示失败)
+    function saveChannelCard(card){
+      var btn=card.querySelector('[data-save-channel]');
+      var id=btn?btn.getAttribute('data-save-channel'):'';
+      var payload={};
+      card.querySelectorAll('[data-field]').forEach(function(el){
+        var f=el.getAttribute('data-field');
+        var v=el.value;
+        if(f==='tid'){v=v?parseInt(v,10):undefined;}
+        payload[f]=v;
+      });
+      // 投稿类型(radio)
+      var radio=card.querySelector('input[name="copyright-'+id+'"]:checked');
+      if(radio)payload.copyright=parseInt(radio.value,10);
+      if(btn)setBtnLoading(btn,true,'保存中…');
+      return fetch('/api/channels/'+encodeURIComponent(id),{
+        method:'PUT',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      })
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(btn)setBtnLoading(btn,false);
+        return d;
+      })
+      .catch(function(e){
+        if(btn)setBtnLoading(btn,false);
+        return {error:(e.message||e)};
+      });
     }
 
     // 绑定频道卡片事件(删除/启用切换/保存)
@@ -1655,7 +1764,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         toggle.addEventListener('click',function(){
           var id=toggle.getAttribute('data-toggle-channel');
           var knob=toggle.querySelector('div');
-          var nowOn=toggle.style.background.indexOf('brand-500')>=0;
+          var nowOn=toggle.getAttribute('data-enabled')==='1';
           var newVal=!nowOn;
           fetch('/api/channels/'+encodeURIComponent(id),{
             method:'PUT',
@@ -1666,6 +1775,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           .then(function(r){return r.json();})
           .then(function(d){
             if(d.error){showToast(d.error,'error');return;}
+            toggle.setAttribute('data-enabled',newVal?'1':'0');
             toggle.style.background=newVal?'var(--brand-500)':'var(--background-400)';
             knob.style.left=newVal?'':'2px';
             knob.style.right=newVal?'2px':'';
@@ -1678,35 +1788,11 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       // 保存配置
       list.querySelectorAll('[data-save-channel]').forEach(function(btn){
         btn.addEventListener('click',function(){
-          var id=btn.getAttribute('data-save-channel');
           var card=btn.closest('.channel-card');
           if(!card)return;
-          var payload={};
-          card.querySelectorAll('[data-field]').forEach(function(el){
-            var f=el.getAttribute('data-field');
-            var v=el.value;
-            if(f==='tid'){v=v?parseInt(v,10):undefined;}
-            payload[f]=v;
-          });
-          // 投稿类型(radio)
-          var radio=card.querySelector('input[name="copyright-'+id+'"]:checked');
-          if(radio)payload.copyright=parseInt(radio.value,10);
-          setBtnLoading(btn,true,'保存中…');
-          fetch('/api/channels/'+encodeURIComponent(id),{
-            method:'PUT',
-            credentials:'include',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify(payload)
-          })
-          .then(function(r){return r.json();})
-          .then(function(d){
-            setBtnLoading(btn,false);
-            if(d.error){showToast(d.error,'error');}
-            else{showToast('配置已保存','success');}
-          })
-          .catch(function(e){
-            setBtnLoading(btn,false);
-            showToast('保存失败:'+(e.message||e),'error');
+          saveChannelCard(card).then(function(d){
+            if(d.error)showToast(d.error,'error');
+            else showToast('配置已保存','success');
           });
         });
       });
@@ -1722,8 +1808,19 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       saveChannelBtn.addEventListener('click',function(){
         var cards=channelsSection.querySelectorAll('.channel-card');
         if(cards.length===0){showToast('暂无频道可保存','info');return;}
-        var saveBtns=channelsSection.querySelectorAll('[data-save-channel]');
-        saveBtns.forEach(function(b){b.click();});
+        setBtnLoading(saveChannelBtn,true,'批量保存中…');
+        var promises=[];
+        cards.forEach(function(card){promises.push(saveChannelCard(card));});
+        Promise.all(promises).then(function(results){
+          setBtnLoading(saveChannelBtn,false);
+          var ok=0,fail=0;
+          results.forEach(function(d){if(d&&d.error)fail++;else ok++;});
+          if(fail===0){
+            showToast('批量保存完成,成功 '+ok+' 个','success');
+          }else{
+            showToast('批量保存:成功 '+ok+' 个,失败 '+fail+' 个','error');
+          }
+        });
       });
     }
   }
@@ -1814,7 +1911,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
                   '<td style="padding:12px 16px;font-size:12px;color:var(--apple-foreground)">'+escapeHtml(r.video_title||'')+'</td>'+
                   '<td style="padding:12px 16px">'+statusBadge+'</td>'+
                   '<td style="padding:12px 16px;font-size:12px;font-family:monospace;color:var(--apple-muted-foreground);white-space:nowrap">'+timeStr+'</td>'+
-                  '<td style="padding:12px 16px;font-size:12px;color:var(--apple-muted-foreground)">'+(r.message||'--')+'</td>';
+                  '<td style="padding:12px 16px;font-size:12px;color:var(--apple-muted-foreground)">'+escapeHtml(r.message||'--')+'</td>';
                 tbody.appendChild(tr);
               });
             }
@@ -1946,21 +2043,6 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         });
       });
     }
-
-    // 从 /api/config 读取回显
-    fetch('/api/config',{credentials:'include'})
-      .then(function(r){return r.json();})
-      .then(function(cfg){
-        var url=cfg.notify_webhook||'';
-        if(url){
-          if(notifySwitch)notifySwitch.checked=true;
-          if(notifyUrlInput)notifyUrlInput.value=url;
-          setNotifySwitchUI(true);
-        }else{
-          setNotifySwitchUI(false);
-        }
-      })
-      .catch(function(e){console.warn('[notify load]',e);});
   }
 
   // ===== 手动添加视频 =====

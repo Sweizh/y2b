@@ -8,6 +8,10 @@ on:
   # 允许手动触发用于调试
   workflow_dispatch:
 
+# 显式声明最小权限:本 workflow 仅需读取仓库内容,无需 write / packages 等
+permissions:
+  contents: read
+
 # 流水线只允许同时运行一个,避免 B 站 / YouTube 限流
 concurrency:
   group: pipeline
@@ -16,7 +20,8 @@ concurrency:
 jobs:
   pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 单视频最坏约 40min(下载+ASR+上传),多视频需放宽到 120min
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
