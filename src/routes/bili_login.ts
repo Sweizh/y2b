@@ -46,8 +46,15 @@ app.get('/qrcode', async (c) => {
   const requestId = getRequestId(c);
   const start = Date.now();
   try {
+    // B 站 passport 端点需要 buvid3 cookie 否则风控返回 "request was banned"
+    // 先调 finger/spide 拿真实 buvid3,失败用随机 UUID 兜底
+    const buvid3 = await getBuvid3(requestId);
+    const headers = { ...BILI_PASSPORT_HEADERS };
+    if (buvid3) {
+      headers['Cookie'] = `buvid3=${buvid3}`;
+    }
     const resp = await fetch(BILI_QRCODE_URL, {
-      headers: BILI_PASSPORT_HEADERS,
+      headers,
       // 不自动跟随重定向(B 站可能 302 到 HTML 登录页)
       redirect: 'manual',
     });
@@ -78,6 +85,25 @@ app.get('/qrcode', async (c) => {
   }
 });
 
+// 获取 buvid3:调 finger/spide 接口,失败用随机 UUID 兜底
+// buvid3 是 B 站风控必需的设备指纹标识
+async function getBuvid3(requestId: string): Promise<string> {
+  try {
+    const resp = await fetch(BILI_FINGER_SPIDE, {
+      headers: { 'User-Agent': UA },
+    });
+    const data = await resp.json() as any;
+    if (data.code === 0 && data.data?.b_3) {
+      return data.data.b_3 as string;
+    }
+    log('bili_finger', 'warning', { requestId, code: data.code, message: data.message });
+  } catch (e: any) {
+    log('bili_finger', 'warning', { requestId, error: e.message });
+  }
+  // 兜底:生成 UUID 格式的 buvid3(B 站校验宽松)
+  return crypto.randomUUID().toUpperCase();
+}
+
 // 查询登录状态
 // 返回 { status: 'waiting'|'scanned'|'success'|'expired'|'error', uname?, message? }
 app.get('/qrcode/status', async (c) => {
@@ -88,8 +114,13 @@ app.get('/qrcode/status', async (c) => {
     return c.json({ error: '缺少 qrcode_key 参数' }, 400);
   }
   try {
+    const buvid3 = await getBuvid3(requestId);
+    const pollHeaders = { ...BILI_PASSPORT_HEADERS };
+    if (buvid3) {
+      pollHeaders['Cookie'] = `buvid3=${buvid3}`;
+    }
     const resp = await fetch(`${BILI_QRCODE_INFO}?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
-      headers: BILI_PASSPORT_HEADERS,
+      headers: pollHeaders,
       redirect: 'manual',
     });
     // 检查响应是否为 JSON
@@ -172,21 +203,8 @@ async function parseBiliLoginCookies(
       return { ok: false, error: 'crossDomain URL 中缺少 SESSDATA 或 bili_jct' };
     }
 
-    // buvid3:优先调 finger/spide 拿真实值,失败用随机 UUID 兜底
-    let buvid3 = '';
-    try {
-      const fingerResp = await fetch(BILI_FINGER_SPIDE, { headers: { 'User-Agent': UA } });
-      const fingerData = await fingerResp.json() as any;
-      if (fingerData.code === 0 && fingerData.data?.b_3) {
-        buvid3 = fingerData.data.b_3;
-      }
-    } catch (e) {
-      log('bili_finger', 'warning', { requestId, error: (e as Error).message });
-    }
-    if (!buvid3) {
-      // 兜底:生成 UUID-like 字符串(B 站对 buvid3 校验宽松)
-      buvid3 = crypto.randomUUID().toUpperCase();
-    }
+    // buvid3:用统一的 getBuvid3 函数(优先调 finger/spide,失败用随机 UUID 兜底)
+    const buvid3 = await getBuvid3(requestId);
 
     // ac_time_value:从 SESSDATA 解码 JWT-like payload 取 exp
     // SESSDATA 实际格式是 base64url payload(非标准 JWT,无 signature 段)
