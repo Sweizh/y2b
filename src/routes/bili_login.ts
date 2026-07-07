@@ -47,12 +47,9 @@ app.get('/qrcode', async (c) => {
   const start = Date.now();
   try {
     // B 站 passport 端点需要 buvid3 cookie 否则风控返回 "request was banned"
-    // 先调 finger/spide 拿真实 buvid3,失败用随机 UUID 兜底
-    const buvid3 = await getBuvid3(requestId);
+    const { buvid3, source: buvid3Source } = await getBuvid3(requestId);
     const headers = { ...BILI_PASSPORT_HEADERS };
-    if (buvid3) {
-      headers['Cookie'] = `buvid3=${buvid3}`;
-    }
+    headers['Cookie'] = `buvid3=${buvid3}`;
     const resp = await fetch(BILI_QRCODE_URL, {
       headers,
       // 不自动跟随重定向(B 站可能 302 到 HTML 登录页)
@@ -71,7 +68,7 @@ app.get('/qrcode', async (c) => {
       // 诊断信息:帮助排查 "request was banned"
       const buvid3Preview = buvid3.slice(0, 20);
       const buvid3HasInfoc = buvid3.includes('infoc') ? 'yes' : 'no';
-      return c.json({ error: data.message || '获取二维码失败', debug: { buvid3_preview: buvid3Preview, has_infoc: buvid3HasInfoc, bili_code: data.code } }, 502);
+      return c.json({ error: data.message || '获取二维码失败', debug: { buvid3_source: buvid3Source, buvid3_preview: buvid3Preview, has_infoc: buvid3HasInfoc, bili_code: data.code } }, 502);
     }
     // data.data: { url, qrcode_key, webUrl(可选) }
     const d = data.data || {};
@@ -91,26 +88,29 @@ app.get('/qrcode', async (c) => {
 // 获取 buvid3:调 finger/spi 接口拿真实设备指纹
 // buvid3 格式如 "AF0E8DB1-...-36043infoc",是 B 站风控必需的
 // 随机 UUID 不带 infoc 后缀会被风控拒绝("request was banned")
-async function getBuvid3(requestId: string): Promise<string> {
+async function getBuvid3(requestId: string): Promise<{ buvid3: string; source: string }> {
   try {
     const resp = await fetch(BILI_FINGER_SPI, {
       headers: { 'User-Agent': UA },
     });
     const ct = resp.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      log('bili_finger', 'warning', { requestId, status: resp.status, contentType: ct });
-    } else {
+    if (ct.includes('application/json')) {
       const data = await resp.json() as any;
       if (data.code === 0 && data.data?.b_3) {
-        return data.data.b_3 as string;
+        return { buvid3: data.data.b_3 as string, source: 'spi' };
       }
       log('bili_finger', 'warning', { requestId, code: data.code, message: data.message });
+    } else {
+      log('bili_finger', 'warning', { requestId, status: resp.status, contentType: ct });
     }
   } catch (e: any) {
     log('bili_finger', 'warning', { requestId, error: e.message });
   }
-  // 兜底:生成 UUID 格式的 buvid3(不带 infoc 后缀,可能被风控拒绝)
-  return crypto.randomUUID().toUpperCase();
+  // 兜底:生成格式正确的 buvid3(UUID + 5位数字 + infoc 后缀)
+  // finger/spi 接口从 Cloudflare Worker 可能也被风控,用本地生成兜底
+  const uuid = crypto.randomUUID().toUpperCase();
+  const num = (Math.floor(Date.now() / 1000) % 100000).toString().padStart(5, '0');
+  return { buvid3: `${uuid}${num}infoc`, source: 'local_gen' };
 }
 
 // 查询登录状态
