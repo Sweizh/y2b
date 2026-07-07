@@ -10,11 +10,11 @@
       fetch('/api/init-status', { credentials: 'include' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          location.href = data.initialized ? '控制台.html' : '登录.html';
+          location.href = data.initialized ? 'console.html' : 'login.html';
         })
         .catch(function() {
           // 后端未启动（纯静态访问），直接跳登录页
-          location.href = '登录.html';
+          location.href = 'login.html';
         });
     })();
   </script>

@@ -560,14 +560,14 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           console.log('[yt2bili] pipeline_token (请复制到 GitHub Secrets):',res.data.pipeline_token);
           setTimeout(function(){
             alert('初始化成功！\n\n请保存以下 pipeline_token 到 GitHub Secrets (PIPELINE_TOKEN):\n'+res.data.pipeline_token+'\n\n（也可稍后在控制台查看）');
-            location.href='控制台.html';
+            location.href='console.html';
           },300);
         }else{
-          setTimeout(function(){location.href='控制台.html';},800);
+          setTimeout(function(){location.href='console.html';},800);
         }
       }else{
         showToast('登录成功，正在进入控制台…','success');
-        setTimeout(function(){location.href='控制台.html';},800);
+        setTimeout(function(){location.href='console.html';},800);
       }
     })
     .catch(function(e){

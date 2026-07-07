@@ -141,9 +141,8 @@ async function serveStatic(c: any, path: string) {
 
 app.get('/', (c) => serveStatic(c, '/'));
 app.get('/index.html', (c) => serveStatic(c, '/index.html'));
-// 中文字符串 URL 编码后的路径
-app.get('/登录.html', (c) => serveStatic(c, '/登录.html'));
-app.get('/控制台.html', (c) => serveStatic(c, '/控制台.html'));
+app.get('/login.html', (c) => serveStatic(c, '/login.html'));
+app.get('/console.html', (c) => serveStatic(c, '/console.html'));
 
 // 404 兜底
 app.notFound((c) => {

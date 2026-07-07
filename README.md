@@ -54,8 +54,8 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 │       └── pipeline.ts       # /api/pipeline/{config,processed,status,cookies}（Bearer Token）
 ├── public/
 │   ├── index.html            # 入口，自动跳转登录页或控制台
-│   ├── 登录.html
-│   └── 控制台.html           # 含已处理视频列表 + 失败通知配置
+│   ├── login.html            # 登录页
+│   └── console.html          # 控制台（含已处理视频列表 + 失败通知配置）
 ├── scripts/
 │   ├── main.py               # Python Runner 主流程(下载→转写→翻译→上传→回写)
 │   ├── setup.mjs             # 从 .dev.vars/环境变量生成本地 wrangler.toml
