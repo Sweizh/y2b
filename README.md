@@ -58,11 +58,13 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 │   └── 控制台.html           # 含已处理视频列表 + 失败通知配置
 ├── scripts/
 │   ├── main.py               # Python Runner 主流程(下载→转写→翻译→上传→回写)
+│   ├── setup.mjs             # 从 .dev.vars/环境变量生成本地 wrangler.toml
 │   └── requirements.txt      # yt-dlp / bilibili-api-python / requests
 ├── .github/
 │   └── workflows/
 │       └── process.yml       # GitHub Actions workflow(repository_dispatch 触发)
-├── wrangler.toml              # [site] + KV 配置
+├── wrangler.toml.example      # wrangler 配置模板(入库,含 ${VAR} 占位符)
+├── wrangler.toml              # 本地 wrangler 配置(不入库,由 setup.mjs 生成)
 ├── package.json
 ├── tsconfig.json
 ├── .dev.vars.example          # 本地开发环境变量模板(入库)
@@ -84,11 +86,19 @@ npm run dev
 npm run tail
 ```
 
-`.dev.vars` 文件示例：
+`.dev.vars` 文件示例（首次使用 `cp .dev.vars.example .dev.vars` 创建）：
 
 ```
+# KV 命名空间 ID（从 Cloudflare Dashboard → KV → 你的命名空间 复制）
+# 本地开发不设置也能用,wrangler dev 会用本地 KV 模拟(数据不持久)
+CLOUDFLARE_KV_ID="your-kv-namespace-id"
+CLOUDFLARE_KV_PREVIEW_ID="your-kv-preview-id"
+
+# 加密主密钥(任意长度字符串,经 SHA-256 派生为 32 字节 AES 密钥)
 ENCRYPTION_KEY="任意长度的字符串，会自动经 SHA-256 派生为 32 字节 AES 密钥"
 ```
+
+> **fork 友好**:`wrangler.toml` 不入库(在 `.gitignore` 中),由 `scripts/setup.mjs` 在 `npm install` 时从 `.dev.vars` 或环境变量自动生成。sync fork 不会覆盖你的 KV id。
 
 ## 部署指南
 
@@ -96,16 +106,20 @@ ENCRYPTION_KEY="任意长度的字符串，会自动经 SHA-256 派生为 32 字
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
 2. Workers & Pages → KV → 创建命名空间 `YT2BILI_KV`
-3. 复制命名空间 ID，填入 `wrangler.toml` 的 `id` 字段
+3. 复制命名空间 ID（后面要用）
 
-### 步骤 2：配置 wrangler.toml
+### 步骤 2：本地配置（wrangler 命令行部署用）
 
-```toml
-[[kv_namespaces]]
-binding = "YT2BILI_KV"
-id = "你的KV命名空间ID"
-preview_id = "你的KV预览ID"  # 可与 id 相同
+```bash
+# 复制环境变量模板并填入你的 KV id
+cp .dev.vars.example .dev.vars
+# 编辑 .dev.vars,填入 CLOUDFLARE_KV_ID 和 CLOUDFLARE_KV_PREVIEW_ID
+
+# 生成 wrangler.toml（也可在 npm install 时自动生成）
+npm run setup
 ```
+
+`wrangler.toml` 由 `scripts/setup.mjs` 从 `wrangler.toml.example` + `.dev.vars` 自动生成,**不入库**（避免 fork sync 覆盖）。
 
 ### 步骤 3：设置加密密钥
 
@@ -135,8 +149,13 @@ npm run deploy
    - Build command: `npm install`
    - Deploy command: `npx wrangler deploy`
 6. 保存后,每次 push 到 `main` 分支自动部署
-7. 在 Worker → Settings → Variables 中配置 `ENCRYPTION_KEY`(加密密钥)
-8. 在 Worker → Settings → KV Namespace Bindings 中绑定 `YT2BILI_KV`
+7. 在 Worker → Settings → Variables 中配置以下变量(构建时 + 运行时都会用到):
+   - `CLOUDFLARE_KV_ID` = 你的 KV 命名空间 ID(明文,构建时供 setup.mjs 读取)
+   - `CLOUDFLARE_KV_PREVIEW_ID` = 你的 KV 预览 ID(可与上面相同)
+   - `ENCRYPTION_KEY` = 加密密钥(选 Encrypt,运行时供 Worker 读取)
+8. 在 Worker → Settings → KV Namespace Bindings 中绑定 `YT2BILI_KV`(指向同一命名空间)
+
+> **fork 友好**:每个 fork 用户在自己的 Worker → Settings → Variables 中配置自己的 `CLOUDFLARE_KV_ID`,互不影响。sync 上游不会覆盖,因为 `wrangler.toml` 不入库。
 
 ### 步骤 5：初始化后台
 
@@ -229,23 +248,26 @@ Worker 详情页 → Logs 标签:
 git clone https://github.com/Sweizh/y2b.git
 cd y2b
 
-# 2. 安装依赖
+# 2. 安装依赖(自动生成 wrangler.toml,本地用 KV 模拟)
 npm install
 
+# 3. 配置本地环境变量
+cp .dev.vars.example .dev.vars
+# 编辑 .dev.vars,填入 CLOUDFLARE_KV_ID(可选,本地不填用模拟)和 ENCRYPTION_KEY
+npm run setup                    # 重新生成 wrangler.toml(读取 .dev.vars)
 
-# 3. 本地启动(开发用)
-cp .dev.vars.example .dev.vars  # 编辑加密密钥
+# 4. 本地启动
 npm run dev                      # http://localhost:8787
 
-# 4. 首次访问设置管理密码,记录 pipeline_token
+# 5. 首次访问设置管理密码,记录 pipeline_token
 
-# 5. 部署到 Cloudflare
+# 6. 部署到 Cloudflare
 npx wrangler secret put ENCRYPTION_KEY  # 输入 openssl rand -base64 32 生成的密钥
 npm run deploy
 
-# 6. 在 GitHub 仓库 Settings → Secrets 配置 WORKER_URL 和 PIPELINE_TOKEN
+# 7. 在 GitHub 仓库 Settings → Secrets 配置 WORKER_URL 和 PIPELINE_TOKEN
 
-# 7. 后台填配置 + 点测试 → 完成
+# 8. 后台填配置 + 点测试 → 完成
 ```
 
 ## 失败通知字段说明
