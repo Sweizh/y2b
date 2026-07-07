@@ -7,23 +7,48 @@ import { getRawConfig } from '../kv';
 const app = new Hono<{ Bindings: Env }>();
 
 // 搜索 YouTube 频道
+// 优先用 OAuth access_token(Bearer 头),其次用 yt_api_key(query 参数)
 app.get('/search', async (c) => {
   const q = c.req.query('q');
   if (!q) {
     return c.json({ error: '缺少 q 参数' }, 400);
   }
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
-  if (!cfg.yt_api_key) {
-    return c.json({ error: '请先配置 YouTube API Key' }, 400);
+
+  // 选择鉴权方式:OAuth 优先,API Key 降级
+  // OAuth 模式:检查 token 是否过期,过期则返回提示
+  let useOAuth = false;
+  let accessToken = '';
+  if (cfg.yt_access_token && cfg.yt_refresh_token) {
+    // token 是否过期
+    const now = Date.now();
+    if (cfg.yt_token_expires_at && cfg.yt_token_expires_at > now + 5 * 60 * 1000) {
+      useOAuth = true;
+      accessToken = cfg.yt_access_token;
+    } else {
+      // 过期但已配置 OAuth,提示用户刷新(或调 /api/youtube/oauth/refresh,但本端点无 Pipeline Token,这里仅提示)
+      return c.json({ error: 'YouTube OAuth token 已过期,请重新登录或联系 Runner 刷新' }, 401);
+    }
   }
+  if (!useOAuth && !cfg.yt_api_key) {
+    return c.json({ error: '请先配置 YouTube API Key 或完成 OAuth 登录' }, 400);
+  }
+
+  const headers: Record<string, string> = {};
+  if (useOAuth) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
   try {
     const url = new URL('https://www.googleapis.com/youtube/v3/search');
     url.searchParams.set('part', 'snippet');
     url.searchParams.set('type', 'channel');
     url.searchParams.set('q', q);
     url.searchParams.set('maxResults', '10');
-    url.searchParams.set('key', cfg.yt_api_key);
-    const resp = await fetch(url.toString());
+    if (!useOAuth) {
+      url.searchParams.set('key', cfg.yt_api_key!);
+    }
+    const resp = await fetch(url.toString(), { headers });
     const data = await resp.json() as any;
     if (data.error) {
       return c.json({
@@ -38,8 +63,10 @@ app.get('/search', async (c) => {
       const statsUrl = new URL('https://www.googleapis.com/youtube/v3/channels');
       statsUrl.searchParams.set('part', 'statistics,snippet');
       statsUrl.searchParams.set('id', channelIds.join(','));
-      statsUrl.searchParams.set('key', cfg.yt_api_key);
-      const statsResp = await fetch(statsUrl.toString());
+      if (!useOAuth) {
+        statsUrl.searchParams.set('key', cfg.yt_api_key!);
+      }
+      const statsResp = await fetch(statsUrl.toString(), { headers });
       const statsData = await statsResp.json() as any;
       if (statsData.items) {
         for (const item of statsData.items) {

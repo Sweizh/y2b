@@ -110,4 +110,36 @@ app.post('/logout', async (c) => {
   return c.json({ success: true });
 });
 
+// 修改密码(需登录态,校验旧密码后写入新密码)
+app.post('/auth/change-password', async (c) => {
+  const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  const start = Date.now();
+  const body = await c.req.json().catch(() => ({}));
+  const oldPassword = body.old_password;
+  const newPassword = body.new_password;
+  if (!oldPassword || !newPassword) {
+    return c.json({ error: '请输入旧密码和新密码' }, 400);
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return c.json({ error: '新密码至少 8 位' }, 400);
+  }
+  const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
+  if (!cfg.initialized) {
+    return c.json({ error: '系统未初始化' }, 400);
+  }
+  const ok = await verifyPassword(oldPassword, cfg.admin_password || '');
+  if (!ok) {
+    log('change_password', 'failed', { requestId, reason: 'wrong_old_password', duration: Date.now() - start });
+    return c.json({ error: '旧密码错误' }, 401);
+  }
+  const hashed = await hashPassword(newPassword);
+  // 仅更新 admin_password,保留其他配置(包括当前 Session,不强制重新登录)
+  await putConfig(c.env.YT2BILI_KV, {
+    ...cfg,
+    admin_password: hashed,
+  }, c.env.ENCRYPTION_KEY || '');
+  log('change_password', 'success', { requestId, duration: Date.now() - start });
+  return c.json({ success: true });
+});
+
 export default app;

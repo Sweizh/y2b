@@ -11,8 +11,22 @@ export interface Config {
   bili_jct?: string;
   bili_buvid3?: string;
   ac_time_value?: string;
-  // YouTube
+  bili_login_at?: number;          // 上次扫码登录时间戳(ms),供前端展示
+  bili_uname?: string;             // 上次扫码登录的账号名,供前端展示
+  // YouTube API Key 模式(旧)
   yt_api_key?: string;
+  // YouTube OAuth 模式(新,优先于 yt_api_key)
+  yt_client_id?: string;           // Google OAuth 客户端 ID
+  yt_client_secret?: string;       // Google OAuth 客户端密钥(加密存储)
+  yt_redirect_uri?: string;        // OAuth 回调地址(如 https://xxx.workers.dev/api/youtube/oauth/callback)
+  yt_access_token?: string;        // OAuth access token(加密存储)
+  yt_refresh_token?: string;       // OAuth refresh token(加密存储,长期有效)
+  yt_token_expires_at?: number;    // access token 过期时间戳(ms)
+  yt_user_email?: string;          // OAuth 登录的 Google 账号 email(非敏感,展示用)
+  yt_user_name?: string;           // OAuth 登录的账号显示名(非敏感,展示用)
+  yt_user_avatar?: string;         // OAuth 登录的账号头像 URL(非敏感)
+  yt_login_at?: number;            // 上次 OAuth 登录时间戳(ms)
+  // yt-dlp 下载用 cookies(Netscape cookies.txt 格式,加密存储)
   yt_cookies?: string;
   // GitHub
   gh_token?: string;
@@ -100,14 +114,18 @@ const MAX_STATUS_RECORDS = 100;  // 状态记录:保留最近 100 条
 // 敏感字段列表：存储时加密，读取时解密
 const SENSITIVE_FIELDS: (keyof Config)[] = [
   'bili_sessdata', 'bili_jct', 'bili_buvid3', 'ac_time_value',
-  'yt_api_key', 'yt_cookies', 'gh_token', 'asr_key', 'translate_key',
+  'yt_api_key', 'yt_cookies',
+  'yt_client_secret', 'yt_access_token', 'yt_refresh_token',  // OAuth 凭证(加密)
+  'gh_token', 'asr_key', 'translate_key',
 ];
 
 // 脱敏字段列表：GET /api/config 返回时打码
 // 注意:pipeline_token 不在此列表,而是在 maskConfig 中直接删除
 const MASK_FIELDS: (keyof Config)[] = [
   'admin_password', 'bili_sessdata', 'bili_jct', 'bili_buvid3', 'ac_time_value',
-  'yt_api_key', 'yt_cookies', 'gh_token', 'asr_key', 'translate_key',
+  'yt_api_key', 'yt_cookies',
+  'yt_client_secret', 'yt_access_token', 'yt_refresh_token',
+  'gh_token', 'asr_key', 'translate_key',
 ];
 
 // 统一脱敏:固定返回 ****,不泄露明文片段(长度提示供前端判断是否已设置)

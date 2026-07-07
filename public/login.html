@@ -123,6 +123,10 @@
   --state-error-surface: #ffecea;
   --state-error-foreground: #ffffff;
 
+  /* state-warning */
+  --state-warning: #d97706;
+  --state-warning-surface: rgba(217, 119, 6, 0.12);
+
   /* ===== SEMANTIC ROLES ===== */
 
   /* semantic */
@@ -217,6 +221,10 @@
   --input: var(--background-700);
   --ring: var(--brand-400);
 
+  /* state-warning (dark theme) */
+  --state-warning: #f59e0b;
+  --state-warning-surface: rgba(245, 158, 11, 0.14);
+
   --icon: var(--icon-50);
   --icon-muted: var(--icon-500);
 
@@ -303,18 +311,6 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     <style>
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      [data-icon] {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        -webkit-mask-size: contain;
-        mask-size: contain;
-        -webkit-mask-repeat: no-repeat;
-        mask-repeat: no-repeat;
-        -webkit-mask-position: center;
-        mask-position: center;
-        background-color: currentColor;
-      }
     </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
@@ -335,9 +331,15 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       </p>
     </div>
 
+    <!-- Loading placeholder (shown until init-status resolves to avoid mode flicker) -->
+    <div id="login-loading" class="p-8 rounded-xl border"
+         style="background: var(--apple-card); border-color: var(--apple-border); box-shadow: var(--shadow-md); border-radius: calc(var(--spacing) * 5); min-height: 200px; display: flex; align-items: center; justify-content: center; color: var(--apple-muted-foreground); font-size: 14px;">
+      加载中...
+    </div>
+
     <!-- Card -->
-    <div class="p-8 rounded-xl border"
-         style="background: var(--apple-card); border-color: var(--apple-border); box-shadow: var(--shadow-md); border-radius: calc(var(--spacing) * 5);">
+    <div id="login-card" class="p-8 rounded-xl border"
+         style="background: var(--apple-card); border-color: var(--apple-border); box-shadow: var(--shadow-md); border-radius: calc(var(--spacing) * 5); display:none;">
 
       <!-- Initialize mode label -->
       <div class="mb-6">
@@ -359,7 +361,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             密码
           </label>
           <div class="field" style="width: 100%; min-width: 0;">
-            <span data-icon="user" style="width: 18px; height: 18px; flex-shrink: 0;"></span>
+            <i data-lucide="user" style="width: 18px; height: 18px; flex-shrink: 0;"></i>
             <input class="control" type="password" placeholder="输入管理密码" autocomplete="new-password">
             <button type="button" class="clear" aria-label="显示密码"
                     style="width: 18px; height: 18px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;">
@@ -374,7 +376,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             确认密码
           </label>
           <div class="field" style="width: 100%; min-width: 0;">
-            <span data-icon="circle-check" style="width: 18px; height: 18px; flex-shrink: 0;"></span>
+            <i data-lucide="circle-check" style="width: 18px; height: 18px; flex-shrink: 0;"></i>
             <input class="control" type="password" placeholder="再次输入密码" autocomplete="new-password">
             <button type="button" class="clear" aria-label="显示密码"
                     style="width: 18px; height: 18px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;">
@@ -395,8 +397,8 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       </div>
 
       <!-- Forgot password (login mode, hidden in initialize) -->
-      <div class="mt-4 text-center hidden">
-        <button type="button" class="text-xs underline" style="color: var(--apple-muted-foreground); background: none; border: none; cursor: pointer; padding: 0; font-family: var(--font-sans);">
+      <div class="mt-4 text-center" data-dom-id="forgot-wrap" style="display:none">
+        <button type="button" data-dom-id="forgot-password-btn" class="text-xs underline" style="color: var(--apple-muted-foreground); background: none; border: none; cursor: pointer; padding: 0; font-family: var(--font-sans);">
           忘记密码？
         </button>
       </div>
@@ -457,7 +459,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   var confirmGroup=confirmInput?confirmInput.closest('div'):null;
   var titleEl=document.querySelector('h2');
   var descEl=document.querySelector('h2 + p');
-  var forgotWrap=document.querySelector('.hidden.text-center');
+  var forgotWrap=document.querySelector('[data-dom-id="forgot-wrap"]');
   var footerNote=document.querySelector('p.text-center.text-xs.mt-6');
 
   function applyMode(){
@@ -466,7 +468,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       if(titleEl)titleEl.textContent='登录';
       if(descEl)descEl.textContent='请输入管理密码以进入控制台';
       if(confirmGroup)confirmGroup.style.display='none';
-      if(forgotWrap)forgotWrap.classList.remove('hidden');
+      if(forgotWrap)forgotWrap.style.display='';
       if(footerNote)footerNote.textContent='登录后可在控制台右上角切换主题';
       if(passwordInput)passwordInput.setAttribute('placeholder','输入管理密码');
     }else{
@@ -474,7 +476,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       if(titleEl)titleEl.textContent='设置管理密码';
       if(descEl)descEl.textContent='首次使用，请设置一个安全的管理密码';
       if(confirmGroup)confirmGroup.style.display='';
-      if(forgotWrap)forgotWrap.classList.add('hidden');
+      if(forgotWrap)forgotWrap.style.display='none';
       if(footerNote)footerNote.textContent='初始化完成后，密码将用于保护管理后台访问';
       if(passwordInput)passwordInput.setAttribute('placeholder','输入管理密码');
     }
@@ -512,6 +514,13 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     });
   });
 
+  function showForm(){
+    var loading=document.getElementById('login-loading');
+    var card=document.getElementById('login-card');
+    if(loading)loading.style.display='none';
+    if(card)card.style.display='';
+  }
+
   // 启动时检查后端初始化状态
   fetch('/api/init-status',{credentials:'include'})
     .then(function(r){return r.json();})
@@ -522,12 +531,14 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         mode='init';
       }
       applyMode();
+      showForm();
     })
     .catch(function(){
       // 后端不可用时按 URL 参数兜底
       var urlMode=new URLSearchParams(location.search).get('mode');
       if(urlMode==='login')mode='login';
       applyMode();
+      showForm();
     });
 
   // 提交逻辑
@@ -557,7 +568,6 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         showToast('初始化成功，正在进入控制台…','success');
         // 初始化时返回 pipeline_token，提示用户保存
         if(res.data.pipeline_token){
-          console.log('[yt2bili] pipeline_token (请复制到 GitHub Secrets):',res.data.pipeline_token);
           setTimeout(function(){
             alert('初始化成功！\n\n请保存以下 pipeline_token 到 GitHub Secrets (PIPELINE_TOKEN):\n'+res.data.pipeline_token+'\n\n（也可稍后在控制台查看）');
             location.href='console.html';
@@ -581,6 +591,74 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   [passwordInput,confirmInput].forEach(function(inp){
     if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();submit();}});
   });
+
+  // 忘记密码：内联提示密码重置方式
+  var forgotBtn=document.querySelector('[data-dom-id="forgot-password-btn"]');
+  if(forgotBtn){
+    forgotBtn.addEventListener('click',function(){
+      // 创建内联 modal 提示密码重置方式
+      var overlay=document.createElement('div');
+      overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+      var card=document.createElement('div');
+      card.style.cssText='background:var(--apple-background,#fff);border-radius:16px;padding:24px;max-width:420px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,0.2);';
+      var title=document.createElement('h3');
+      title.textContent='重置管理密码';
+      title.style.cssText='font-size:16px;font-weight:600;margin:0 0 12px 0;color:var(--apple-foreground,#000);';
+      var msg=document.createElement('p');
+      msg.textContent='密码不可在线重置。请管理员执行以下步骤:';
+      msg.style.cssText='font-size:13px;color:var(--apple-muted-foreground,#666);margin:0 0 12px 0;line-height:1.5;';
+      var steps=document.createElement('ol');
+      steps.style.cssText='font-size:13px;color:var(--apple-foreground,#000);margin:0 0 16px 0;padding-left:20px;line-height:1.7;';
+      steps.innerHTML='<li>登录 Cloudflare Dashboard</li><li>进入 Workers & Pages → 选择本 Worker</li><li>切换到 KV 标签页</li><li>选择 YT2BILI_KV 命名空间</li><li>删除 <code style="background:var(--apple-secondary,#eee);padding:2px 6px;border-radius:4px;font-family:monospace;">config</code> 键</li><li>访问 /login.html 重新初始化</li>';
+      var btnRow=document.createElement('div');
+      btnRow.style.cssText='display:flex;gap:8px;justify-content:flex-end;';
+      var copyBtn=document.createElement('button');
+      copyBtn.textContent='复制文本';
+      copyBtn.type='button';
+      copyBtn.style.cssText='font-size:13px;padding:8px 16px;border-radius:8px;border:1px solid var(--apple-border,#ddd);background:var(--apple-secondary,#f5f5f5);color:var(--apple-foreground,#000);cursor:pointer;';
+      copyBtn.onclick=function(){
+        var txt='密码不可在线重置。请管理员执行以下步骤:\n1. 登录 Cloudflare Dashboard\n2. 进入 Workers & Pages → 选择本 Worker\n3. 切换到 KV 标签页\n4. 选择 YT2BILI_KV 命名空间\n5. 删除 config 键\n6. 访问 /login.html 重新初始化';
+        if(navigator.clipboard&&navigator.clipboard.writeText){
+          navigator.clipboard.writeText(txt).then(function(){
+            copyBtn.textContent='已复制';
+            setTimeout(function(){copyBtn.textContent='复制文本';},2000);
+          }).catch(function(){
+            copyBtn.textContent='复制失败';
+            setTimeout(function(){copyBtn.textContent='复制文本';},2000);
+          });
+        }else{
+          // Fallback: textarea + execCommand
+          var ta=document.createElement('textarea');
+          ta.value=txt;
+          document.body.appendChild(ta);
+          ta.select();
+          try{document.execCommand('copy');copyBtn.textContent='已复制';setTimeout(function(){copyBtn.textContent='复制文本';},2000);}catch(e){}
+          document.body.removeChild(ta);
+        }
+      };
+      var closeBtn=document.createElement('button');
+      closeBtn.textContent='关闭';
+      closeBtn.type='button';
+      closeBtn.style.cssText='font-size:13px;padding:8px 16px;border-radius:8px;border:none;background:var(--brand-600,#3b82f6);color:#fff;cursor:pointer;';
+      closeBtn.onclick=function(){
+        document.body.removeChild(overlay);
+      };
+      btnRow.appendChild(copyBtn);
+      btnRow.appendChild(closeBtn);
+      card.appendChild(title);
+      card.appendChild(msg);
+      card.appendChild(steps);
+      card.appendChild(btnRow);
+      overlay.appendChild(card);
+      // 点击遮罩外区域关闭
+      overlay.addEventListener('click',function(e){
+        if(e.target===overlay){
+          document.body.removeChild(overlay);
+        }
+      });
+      document.body.appendChild(overlay);
+    });
+  }
 
   if(window.lucide)try{lucide.createIcons();}catch(e){}
 </script>

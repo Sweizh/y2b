@@ -7,6 +7,7 @@ import {
   getProcessed, putProcessed, getStatus, putStatus,
   type ProcessedItem, type StatusRecord,
 } from '../kv';
+import { refreshYouTubeAccessToken } from './youtube_oauth';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -260,6 +261,28 @@ app.post('/cookies', async (c) => {
   }
   await putConfig(c.env.YT2BILI_KV, merged, c.env.ENCRYPTION_KEY || '');
   return c.json({ success: true });
+});
+
+// 刷新 YouTube OAuth access_token(供 Runner 在下载前调用,确保 token 有效)
+// 自动判断是否需要刷新(剩余有效期 > 5 分钟则直接返回当前 token)
+app.post('/yt-oauth-refresh', async (c) => {
+  const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  const result = await refreshYouTubeAccessToken(
+    c.env.YT2BILI_KV,
+    c.env.ENCRYPTION_KEY || '',
+    requestId,
+  );
+  if (!result.ok) {
+    log('pipeline_yt_refresh', 'failed', { requestId, error: result.error });
+    return c.json({ error: result.error || '刷新失败' }, 502);
+  }
+  log('pipeline_yt_refresh', 'success', { requestId, refreshed: result.refreshed });
+  return c.json({
+    success: true,
+    access_token: result.access_token,
+    expires_at: result.expires_at,
+    refreshed: result.refreshed,
+  });
 });
 
 export default app;

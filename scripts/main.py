@@ -391,6 +391,18 @@ def process_video(video_id: str, cfg: dict, channel: dict = None) -> dict:
             "no_warnings": True,
             "socket_timeout": 30,  # 单个 socket 操作超时
         }
+        # YouTube Cookie 配置:支持 OAuth 铸造的 yt_cookies(Netscape cookies.txt 格式)
+        # 用于下载会员视频/高清视频
+        yt_cookies = cfg.get("yt_cookies", "")
+        cookie_file = None
+        if yt_cookies:
+            cookie_file = os.path.join(work_dir, "yt_cookies.txt")
+            with open(cookie_file, "w", encoding="utf-8") as f:
+                f.write(yt_cookies)
+            ydl_opts["cookiefile"] = cookie_file
+            log("download", "cookies_loaded", video_id=video_id, length=len(yt_cookies))
+        else:
+            log("download", "no_cookies", video_id=video_id)
         try:
             import yt_dlp
             # yt-dlp 无整体 timeout,用线程 + join 限制总耗时 1800s

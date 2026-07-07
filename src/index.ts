@@ -13,7 +13,9 @@ import authRoutes from './routes/auth';
 import configRoutes from './routes/config';
 import channelRoutes from './routes/channels';
 import biliRoutes from './routes/bili';
+import biliLoginRoutes from './routes/bili_login';
 import youtubeRoutes from './routes/youtube';
+import youtubeOAuthRoutes from './routes/youtube_oauth';
 import statusRoutes from './routes/status';
 import processedRoutes from './routes/processed';
 import manualRoutes from './routes/manual';
@@ -88,8 +90,13 @@ const PUBLIC_PATHS = new Set([
   '/api/logout',
   '/api/init-status',
   '/api/config/init',
+  '/api/youtube/oauth/start',     // OAuth 起始页(无 Session,用 state 关联)
+  '/api/youtube/oauth/callback',  // OAuth 回调页(用 state 关联,弹窗跳转后 Cookie 上下文丢失)
 ]);
 const PIPELINE_PREFIX = '/api/pipeline';
+const PIPELINE_PUBLIC_PATHS = [
+  // Pipeline 路由下的子路径,允许 Pipeline Token 访问(由 pipeline 路由内部校验)
+];
 
 app.use('/api/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
@@ -115,7 +122,9 @@ app.route('/api', authRoutes);
 app.route('/api/config', configRoutes);
 app.route('/api/channels', channelRoutes);
 app.route('/api', biliRoutes);          // /api/seasons /api/tids /api/test/bili
+app.route('/api/bili/login', biliLoginRoutes);  // /api/bili/login/qrcode /api/bili/login/qrcode/status /api/bili/login/logout
 app.route('/api/youtube', youtubeRoutes);
+app.route('/api/youtube/oauth', youtubeOAuthRoutes);  // /api/youtube/oauth/start /callback /refresh
 app.route('/api/status', statusRoutes);
 app.route('/api/processed', processedRoutes);
 app.route('/api/manual-queue', manualRoutes);
