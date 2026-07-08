@@ -84,6 +84,45 @@ app.get('/qrcode', async (c) => {
   }
 });
 
+// 临时调试端点 v2:测试 Cookie 头的影响
+app.get('/debug', async (c) => {
+  const results: any[] = [];
+  const biliUrl = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header';
+  const fakeBuvid3 = 'AF0E8DB1-ABCD-EFGH-IJKL-36043infoc';
+
+  // A. 只 UA(已知 200)
+  try {
+    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA } });
+    results.push({ test: 'A_ua_only', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
+  } catch (e: any) { results.push({ test: 'A_ua_only', error: e.message }); }
+
+  // B. UA + Cookie(假 buvid3)
+  try {
+    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA, 'Cookie': `buvid3=${fakeBuvid3}` } });
+    results.push({ test: 'B_ua_cookie_fake', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
+  } catch (e: any) { results.push({ test: 'B_ua_cookie_fake', error: e.message }); }
+
+  // C. UA + Cookie(先拿真实 buvid3 via finger/spi)
+  try {
+    const spiResp = await fetch(BILI_FINGER_SPI, { headers: { 'User-Agent': UA } });
+    const spiData = await spiResp.json() as any;
+    const realBuvid3 = spiData.data?.b_3 || '';
+    results.push({ test: 'C_spi_result', buvid3: realBuvid3, spiStatus: spiResp.status });
+    if (realBuvid3) {
+      const r = await fetch(biliUrl, { headers: { 'User-Agent': UA, 'Cookie': `buvid3=${realBuvid3}` } });
+      results.push({ test: 'C_ua_cookie_real', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
+    }
+  } catch (e: any) { results.push({ test: 'C_spi', error: e.message }); }
+
+  // D. UA + redirect manual(看是否影响)
+  try {
+    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA }, redirect: 'manual' });
+    results.push({ test: 'D_ua_manual', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
+  } catch (e: any) { results.push({ test: 'D_ua_manual', error: e.message }); }
+
+  return c.json({ results });
+});
+
 // 获取 buvid3:调 finger/spi 接口拿真实设备指纹
 // buvid3 格式如 "AF0E8DB1-...-36043infoc",是 B 站风控必需的
 // 随机 UUID 不带 infoc 后缀会被风控拒绝("request was banned")
