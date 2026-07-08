@@ -17,6 +17,7 @@ import { initChannels } from './sections/channels.mjs';
 import { initStatus } from './sections/status.mjs';
 import { initManual } from './sections/manual.mjs';
 import { ensureToastContainer } from './components/toast.mjs';
+import './speed-insights.mjs';
 
 // 1. 主题(最早,避免 FOUC)
 initTheme();
