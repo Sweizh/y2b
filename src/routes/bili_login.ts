@@ -45,16 +45,11 @@ app.get('/qrcode', async (c) => {
   const requestId = getRequestId(c);
   const start = Date.now();
   try {
-    // B 站 passport 端点需要 buvid3 cookie 否则风控返回 "request was banned"
-    const { buvid3, source: buvid3Source } = await getBuvid3(requestId);
-    const headers = { ...BILI_PASSPORT_HEADERS };
-    headers['Cookie'] = `buvid3=${buvid3}`;
+    // 只带 UA,不带 Referer/Origin/Cookie(实测:带这些头会被 B 站风控 -412)
     const resp = await fetch(BILI_QRCODE_URL, {
-      headers,
-      // 不自动跟随重定向(B 站可能 302 到 HTML 登录页)
+      headers: BILI_PASSPORT_HEADERS,
       redirect: 'manual',
     });
-    // 检查响应是否为 JSON,避免 HTML 解析报错
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
       const body = await resp.text();
@@ -64,63 +59,19 @@ app.get('/qrcode', async (c) => {
     const data = await resp.json() as any;
     if (data.code !== 0) {
       log('bili_qrcode', 'failed', { requestId, code: data.code, message: data.message });
-      // 诊断信息:帮助排查 "request was banned"
-      const buvid3Preview = buvid3.slice(0, 20);
-      const buvid3HasInfoc = buvid3.includes('infoc') ? 'yes' : 'no';
-      return c.json({ error: data.message || '获取二维码失败', debug: { buvid3_source: buvid3Source, buvid3_preview: buvid3Preview, has_infoc: buvid3HasInfoc, bili_code: data.code } }, 502);
+      return c.json({ error: data.message || '获取二维码失败', bili_code: data.code }, 502);
     }
-    // data.data: { url, qrcode_key, webUrl(可选) }
     const d = data.data || {};
     log('bili_qrcode', 'success', { requestId, duration: Date.now() - start });
     return c.json({
       qrcode_url: d.url || '',
       qrcode_key: d.qrcode_key || '',
-      // B 站不直接返回过期时间,文档约定 180s,这里加 30s 余量
       expires_at: Math.floor(Date.now() / 1000) + 180,
     });
   } catch (e: any) {
     log('bili_qrcode', 'error', { requestId, error: e.message });
     return c.json({ error: '请求 B 站失败:' + (e.message || e) }, 502);
   }
-});
-
-// 临时调试端点 v2:测试 Cookie 头的影响
-app.get('/debug', async (c) => {
-  const results: any[] = [];
-  const biliUrl = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header';
-  const fakeBuvid3 = 'AF0E8DB1-ABCD-EFGH-IJKL-36043infoc';
-
-  // A. 只 UA(已知 200)
-  try {
-    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA } });
-    results.push({ test: 'A_ua_only', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
-  } catch (e: any) { results.push({ test: 'A_ua_only', error: e.message }); }
-
-  // B. UA + Cookie(假 buvid3)
-  try {
-    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA, 'Cookie': `buvid3=${fakeBuvid3}` } });
-    results.push({ test: 'B_ua_cookie_fake', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
-  } catch (e: any) { results.push({ test: 'B_ua_cookie_fake', error: e.message }); }
-
-  // C. UA + Cookie(先拿真实 buvid3 via finger/spi)
-  try {
-    const spiResp = await fetch(BILI_FINGER_SPI, { headers: { 'User-Agent': UA } });
-    const spiData = await spiResp.json() as any;
-    const realBuvid3 = spiData.data?.b_3 || '';
-    results.push({ test: 'C_spi_result', buvid3: realBuvid3, spiStatus: spiResp.status });
-    if (realBuvid3) {
-      const r = await fetch(biliUrl, { headers: { 'User-Agent': UA, 'Cookie': `buvid3=${realBuvid3}` } });
-      results.push({ test: 'C_ua_cookie_real', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
-    }
-  } catch (e: any) { results.push({ test: 'C_spi', error: e.message }); }
-
-  // D. UA + redirect manual(看是否影响)
-  try {
-    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA }, redirect: 'manual' });
-    results.push({ test: 'D_ua_manual', status: r.status, ct: r.headers.get('content-type'), body: (await r.text()).slice(0, 150) });
-  } catch (e: any) { results.push({ test: 'D_ua_manual', error: e.message }); }
-
-  return c.json({ results });
 });
 
 // 获取 buvid3:调 finger/spi 接口拿真实设备指纹
@@ -161,11 +112,9 @@ app.get('/qrcode/status', async (c) => {
     return c.json({ error: '缺少 qrcode_key 参数' }, 400);
   }
   try {
-    const { buvid3 } = await getBuvid3(requestId);
-    const pollHeaders = { ...BILI_PASSPORT_HEADERS };
-    pollHeaders['Cookie'] = `buvid3=${buvid3}`;
+    // 只带 UA,不带 Cookie(实测:带 buvid3 Cookie 会触发 B 站风控 -412)
     const resp = await fetch(`${BILI_QRCODE_INFO}?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
-      headers: pollHeaders,
+      headers: BILI_PASSPORT_HEADERS,
       redirect: 'manual',
     });
     // 检查响应是否为 JSON
