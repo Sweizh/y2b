@@ -171,6 +171,7 @@
       flex-wrap: wrap;
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 </head>
 <body>
   <div class="container">
@@ -324,7 +325,22 @@
           // 成功拿到二维码
           qrcodeKey = d.qrcode_key;
           expiresAt = d.expires_at;
-          qrcodeImg.src = d.qrcode_url;
+          // qrcode_url 是扫码跳转网页 URL,不是图片,需用 QR 库转成二维码图片
+          if (typeof qrcode === 'undefined') {
+            setStatus('✕ QR 库未加载(CDN 失败?),请检查网络', 'error');
+            log('QR_ERR', 'qrcode-generator 库未加载', 'err');
+            return;
+          }
+          try {
+            var qr = qrcode(0, 'M');
+            qr.addData(d.qrcode_url);
+            qr.make();
+            qrcodeImg.src = qr.createDataURL(8, 2);
+          } catch (e) {
+            setStatus('✕ 二维码生成失败:' + e.message, 'error');
+            log('QR_ERR', (e && e.message) ? e.message : String(e), 'err');
+            return;
+          }
           qrcodeWrap.style.display = 'flex';
           btnRefresh.style.display = 'inline-flex';
           setStatus('✓ 拿到二维码!请用 B 站 App 扫码', 'success');
