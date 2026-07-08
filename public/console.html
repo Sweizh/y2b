@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0a0a0a">
-    <title>YT2BILI 管理后台</title>
+    <meta name="theme-color" content="#0c100f">
+    <title>YT2BILI · 控制台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="stylesheet" href="/css/dist/app.css">
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <script src="/js/qrcode.js"></script>
 </head>
-<body class="min-h-screen font-sans antialiased">
+<body class="min-h-screen antialiased">
 
 <!-- OAuth 回调处理:检测 URL hash 并通过 postMessage 通知 opener 后关闭窗口 -->
 <script>
@@ -35,22 +37,20 @@
     if(result){
       // SEC-04: targetOrigin 用具体域而非 '*',防止 OAuth 邮箱外泄给任意站点
       try{window.opener&&window.opener.postMessage(result,window.location.origin);}catch(e){}
-      // 显示关闭提示,然后尝试关闭窗口
       document.title='OAuth 登录完成';
       // SEC-01: 用 DOM API + textContent 构造,避免 URL hash 字段注入 XSS
-      // (result.error/result.email 来自 URL hash,未转义直接拼 innerHTML 可导致完整系统接管)
       var wrap=document.createElement('div');
-      wrap.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-family:system-ui,sans-serif;background:#fff;color:#333';
+      wrap.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-family:var(--font-sans),sans-serif;background:var(--bg);color:var(--fg)';
       var p1=document.createElement('p');
-      p1.style.cssText='font-size:16px;font-weight:500';
+      p1.style.cssText='font-family:var(--font-serif);font-size:18px;font-weight:500';
       p1.textContent=result.success?'登录成功':'登录失败';
       var p2=document.createElement('p');
-      p2.style.cssText='font-size:13px;color:#888';
+      p2.style.cssText='font-family:var(--font-mono);font-size:12px;color:var(--fg-muted)';
       p2.textContent=result.error||result.email||'';
       var a=document.createElement('a');
       a.href='javascript:void(0)';
-      a.style.cssText='font-size:13px;color:#007aff;text-decoration:underline';
-      a.textContent='可关闭此窗口';
+      a.style.cssText='font-family:var(--font-mono);font-size:11px;color:var(--accent);text-decoration:underline;letter-spacing:0.08em';
+      a.textContent='CLOSE WINDOW';
       a.onclick=function(){try{window.close();}catch(e){}};
       wrap.appendChild(p1);wrap.appendChild(p2);wrap.appendChild(a);
       document.body.innerHTML='';
@@ -64,410 +64,394 @@
 <div class="flex min-h-screen">
 
   <!-- Mobile hamburger overlay -->
-  <div id="sidebar-overlay" class="fixed inset-0 z-30 hidden" style="background:rgba(0,0,0,0.3)"></div>
+  <div id="sidebar-overlay" class="fixed inset-0 z-30 hidden" style="background:rgba(0,0,0,0.6);backdrop-filter:blur(2px)"></div>
 
-  <!-- Left Sidebar -->
-  <aside class="fixed top-0 left-0 z-40 h-full flex flex-col" style="width:240px;background:var(--apple-sidebar);border-right:1px solid var(--apple-border);box-shadow:var(--shadow-sm)">
-    <!-- Brand -->
-    <div class="flex items-center gap-3 px-5 pt-6 pb-5">
-      <span class="text-base font-bold tracking-wide" style="color:var(--apple-foreground);font-family:var(--font-mono)">YT2BILI</span>
+  <!-- Left Sidebar — 印刷油墨色,垂直品牌字 -->
+  <aside class="fixed top-0 left-0 z-40 h-full flex flex-col" style="width:220px;background:var(--sidebar-bg);border-right:1px solid var(--border)">
+    <!-- Brand:大号衬线 + 垂直 mono 标签 -->
+    <div class="px-6 pt-7 pb-6" style="border-bottom:1px solid var(--border)">
+      <a href="#section-credentials" class="block">
+        <div class="eyebrow mb-2" style="font-size:9px;">Console</div>
+        <span class="display-title" style="font-size:22px;">YT<em>2</em>BILI</span>
+      </a>
     </div>
 
-    <!-- Nav Items -->
-    <nav class="flex-1 flex flex-col gap-1 px-3" aria-label="Dashboard navigation">
-      <a href="#section-credentials" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--brand-500);background:var(--brand-50)">
-        <i data-lucide="user" style="width:18px;height:18px"></i>
-        <span>账号凭证</span>
+    <!-- Nav Items — terminal-style mono 编号 -->
+    <nav class="flex-1 flex flex-col gap-0.5 px-3 py-4" aria-label="Dashboard navigation">
+      <a href="#section-credentials" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--accent);background:var(--accent-surface)">
+        <span class="section-num">01</span>
+        <span style="font-size:13px;font-weight:500;">账号凭证</span>
       </a>
-      <a href="#section-ai-services" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <i data-lucide="box" style="width:18px;height:18px"></i>
-        <span>AI 服务</span>
+      <a href="#section-ai-services" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
+        <span class="section-num">02</span>
+        <span style="font-size:13px;">AI 服务</span>
       </a>
-      <a href="#section-channels" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <i data-lucide="folder-open" style="width:18px;height:18px"></i>
-        <span>频道管理</span>
+      <a href="#section-channels" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
+        <span class="section-num">03</span>
+        <span style="font-size:13px;">频道管理</span>
       </a>
-      <a href="#section-status" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <i data-lucide="circle-play" style="width:18px;height:18px"></i>
-        <span>运行状态</span>
+      <a href="#section-status" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
+        <span class="section-num">04</span>
+        <span style="font-size:13px;">运行状态</span>
       </a>
-      <a href="#section-manual" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
-        <i data-lucide="circle-plus" style="width:18px;height:18px"></i>
-        <span>手动添加</span>
+      <a href="#section-manual" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
+        <span class="section-num">05</span>
+        <span style="font-size:13px;">手动添加</span>
       </a>
     </nav>
 
-    <!-- Logout & Theme -->
-    <div class="px-3 pb-5 pt-3" style="border-top:1px solid var(--apple-border)">
-      <button data-dom-id="theme-toggle-btn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors duration-150 mb-2" style="color:var(--apple-muted-foreground);background:transparent">
-        <span id="theme-toggle-icon" style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:16px">🌙</span>
+    <!-- Logout & Theme — 底部 -->
+    <div class="px-3 pb-5 pt-4" style="border-top:1px solid var(--border)">
+      <button data-dom-id="theme-toggle-btn" class="flex items-center gap-3 px-3 py-2.5 w-full transition-colors duration-150 mb-1" style="color:var(--fg-muted);background:transparent;border:none;cursor:pointer;font-family:var(--font-sans);font-size:13px;">
+        <span id="theme-toggle-icon" style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:14px">◐</span>
         <span>切换主题</span>
       </button>
-      <button data-dom-id="logout-btn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors duration-150" style="color:var(--apple-muted-foreground);background:transparent">
-        <i data-lucide="arrow-left" style="width:18px;height:18px"></i>
+      <button data-dom-id="logout-btn" class="flex items-center gap-3 px-3 py-2.5 w-full transition-colors duration-150" style="color:var(--fg-muted);background:transparent;border:none;cursor:pointer;font-family:var(--font-sans);font-size:13px;">
+        <span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:14px;">←</span>
         <span>退出登录</span>
       </button>
     </div>
   </aside>
 
   <!-- Mobile hamburger button -->
-  <button id="mobile-menu-btn" class="fixed top-4 left-4 z-50 hidden p-2 rounded-lg" style="background:var(--apple-card);border:1px solid var(--apple-border);box-shadow:var(--shadow-xs)" aria-label="打开菜单">
-    <i data-lucide="chevron-down" style="width:20px;height:20px;transform:rotate(-90deg)"></i>
+  <button id="mobile-menu-btn" class="fixed top-4 left-4 z-50 hidden p-2" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)" aria-label="打开菜单">
+    <span style="display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;font-family:var(--font-mono);color:var(--fg)">≡</span>
   </button>
 
   <!-- Main Content Area -->
-  <main class="flex-1 ml-0 lg:ml-0 min-h-screen" style="margin-left:240px;background:var(--apple-background)">
-    <div class="max-w-[960px] mx-auto px-6 py-8 flex flex-col gap-7">
+  <main class="flex-1 min-h-screen" style="margin-left:220px;background:var(--bg)">
+    <div class="mx-auto px-8 py-12" style="max-width:980px;">
 
-      <!-- Mobile-only breadcrumb spacer -->
-      <div class="lg:hidden" style="height:40px"></div>
+      <!-- Mobile-only spacer -->
+      <div class="lg:hidden" style="height:48px"></div>
 
       <!-- ============================================================ -->
-      <!-- Section 1: 账号凭证 (Account Credentials)                     -->
+      <!-- Section 01: 账号凭证                                          -->
       <!-- ============================================================ -->
-      <section id="section-credentials" class="rounded-xl p-6" style="background:var(--apple-card);border:1px solid var(--apple-border);box-shadow:var(--shadow-xs)">
-        <div class="mb-5">
-          <h2 class="text-lg font-semibold" style="color:var(--apple-foreground)">账号凭证</h2>
-          <p class="text-sm mt-1" style="color:var(--apple-muted-foreground)">管理 B 站、YouTube、GitHub 的 API 密钥和认证令牌。敏感信息已脱敏显示。</p>
+      <section id="section-credentials" class="editorial-section reveal">
+        <div class="mb-8">
+          <div class="flex items-baseline gap-3 mb-3">
+            <span class="section-num">01</span>
+            <span class="eyebrow">Credentials</span>
+          </div>
+          <h2 class="display-title" style="font-size:32px;">账号<em>凭证</em></h2>
+          <p class="body-muted mt-2" style="max-width:560px;">管理 B 站、YouTube、GitHub 的 API 密钥与认证令牌。敏感信息已脱敏显示。</p>
         </div>
 
-        <!-- 修改密码 + 扫码登录 B 站 (section top actions) -->
-        <div class="flex flex-wrap items-center gap-3 mb-5 pb-4" style="border-bottom:1px solid var(--apple-border)">
-          <button data-dom-id="change-password-btn" class="h-9 px-4 rounded-lg text-xs font-medium transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">修改密码</button>
+        <!-- 顶部操作行:修改密码 + 扫码登录 B 站 -->
+        <div class="flex flex-wrap items-center gap-3 mb-8 pb-6" style="border-bottom:1px solid var(--border)">
+          <button data-dom-id="change-password-btn" class="btn-ghost btn-xs">修改密码</button>
           <div class="flex items-center gap-2">
-            <button data-dom-id="bili-qrcode-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">扫码登录 B 站</button>
-            <button data-dom-id="bili-check-btn" class="h-9 px-3 rounded-lg text-xs font-medium transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">检测</button>
-            <span data-dom-id="bili-login-status" class="text-xs" style="color:var(--apple-muted-foreground)">未登录</span>
+            <button data-dom-id="bili-qrcode-login" class="btn-accent btn-xs">扫码登录 B 站</button>
+            <button data-dom-id="bili-check-btn" class="btn-ghost btn-xs">检测</button>
+            <span data-dom-id="bili-login-status" style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.04em;">未登录</span>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
 
-          <!-- 管理密码 (read-only status display, no test button) -->
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">管理密码</label>
-            <div class="flex items-center gap-2">
-              <span data-dom-id="admin-password-status" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono flex items-center" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-muted-foreground)">--</span>
-            </div>
+          <!-- 管理密码 -->
+          <div class="flex flex-col gap-2">
+            <label class="section-num">管理密码</label>
+            <span data-dom-id="admin-password-status" class="input-base flex items-center" style="color:var(--fg-muted)">--</span>
           </div>
 
-          <!-- B站手动凭证(已自动登录,默认折叠;点"显示手动凭证"展开用于调试) -->
+          <!-- B站手动凭证折叠 -->
           <div class="md:col-span-2">
-            <button type="button" data-dom-id="bili-manual-toggle" class="text-xs underline transition-colors duration-150" style="color:var(--apple-muted-foreground);background:none;border:none;cursor:pointer;padding:0">显示手动凭证 ▾</button>
+            <button type="button" data-dom-id="bili-manual-toggle" class="btn-link">显示手动凭证 ▾</button>
           </div>
-          <div data-dom-id="bili-manual-wrap" class="contents" style="display:none">
-            <!-- B站 SESSDATA -->
-            <div class="flex flex-col gap-1.5">
-              <label for="fld-bili-sessdata" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 SESSDATA</label>
-              <div class="flex items-center gap-2">
-                <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              </div>
+          <div data-dom-id="bili-manual-wrap" class="contents grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5" style="display:none">
+            <div class="flex flex-col gap-2">
+              <label for="fld-bili-sessdata" class="section-num">B站 SESSDATA</label>
+              <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="input-base">
             </div>
-
-            <!-- B站 bili_jct -->
-            <div class="flex flex-col gap-1.5">
-              <label for="fld-bili-jct" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 bili_jct</label>
-              <div class="flex items-center gap-2">
-                <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              </div>
+            <div class="flex flex-col gap-2">
+              <label for="fld-bili-jct" class="section-num">B站 bili_jct</label>
+              <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="input-base">
             </div>
-
-            <!-- B站 buvid3 -->
-            <div class="flex flex-col gap-1.5">
-              <label for="fld-bili-buvid3" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 buvid3</label>
-              <div class="flex items-center gap-2">
-                <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              </div>
+            <div class="flex flex-col gap-2">
+              <label for="fld-bili-buvid3" class="section-num">B站 buvid3</label>
+              <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="input-base">
             </div>
-
-            <!-- B站 ac_time_value -->
-            <div class="flex flex-col gap-1.5">
-              <label for="fld-bili-ac-time-value" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 ac_time_value</label>
-              <div class="flex items-center gap-2">
-                <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              </div>
+            <div class="flex flex-col gap-2">
+              <label for="fld-bili-ac-time-value" class="section-num">B站 ac_time_value</label>
+              <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="input-base">
             </div>
           </div>
 
-          <!-- OAuth 登录 YouTube + OAuth 配置 (above YouTube API Key) -->
-          <div class="flex flex-col gap-2 md:col-span-2">
+          <!-- OAuth 登录 YouTube + 配置 -->
+          <div class="flex flex-col gap-3 md:col-span-2 mt-2">
             <div class="flex flex-wrap items-center gap-2">
-              <button data-dom-id="yt-oauth-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">OAuth 登录 YouTube</button>
-              <button data-dom-id="yt-check-btn" class="h-9 px-3 rounded-lg text-xs font-medium transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">检测</button>
-              <span data-dom-id="yt-login-status" class="text-xs" style="color:var(--apple-muted-foreground)">未登录</span>
-              <button type="button" data-dom-id="yt-oauth-config-toggle" class="text-xs underline ml-auto transition-colors duration-150" style="color:var(--apple-muted-foreground);background:none;border:none;cursor:pointer;padding:0">OAuth 配置 ▾</button>
+              <button data-dom-id="yt-oauth-login" class="btn-accent btn-xs">OAuth 登录 YouTube</button>
+              <button data-dom-id="yt-check-btn" class="btn-ghost btn-xs">检测</button>
+              <span data-dom-id="yt-login-status" style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.04em;">未登录</span>
+              <button type="button" data-dom-id="yt-oauth-config-toggle" class="btn-link ml-auto">OAuth 配置 ▾</button>
             </div>
-            <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mt-1" style="display:none">
-              <div class="flex flex-col gap-1.5">
-                <label for="fld-yt-oauth-client-id" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client ID</label>
-                <input id="fld-yt-oauth-client-id" type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+            <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5 mt-1" style="display:none">
+              <div class="flex flex-col gap-2">
+                <label for="fld-yt-oauth-client-id" class="section-num">YouTube OAuth Client ID</label>
+                <input id="fld-yt-oauth-client-id" type="text" value="" placeholder="未设置" class="input-base">
               </div>
-              <div class="flex flex-col gap-1.5">
-                <label for="fld-yt-oauth-client-secret" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client Secret</label>
-                <input id="fld-yt-oauth-client-secret" type="password" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <div class="flex flex-col gap-2">
+                <label for="fld-yt-oauth-client-secret" class="section-num">YouTube OAuth Client Secret</label>
+                <input id="fld-yt-oauth-client-secret" type="password" value="" placeholder="未设置" class="input-base">
               </div>
-              <div class="flex flex-col gap-1.5 md:col-span-2">
-                <label for="fld-yt-oauth-redirect-uri" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Redirect URI</label>
-                <input id="fld-yt-oauth-redirect-uri" type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <div class="flex flex-col gap-2 md:col-span-2">
+                <label for="fld-yt-oauth-redirect-uri" class="section-num">YouTube OAuth Redirect URI</label>
+                <input id="fld-yt-oauth-redirect-uri" type="text" value="" placeholder="未设置" class="input-base">
               </div>
             </div>
           </div>
 
           <!-- YouTube API Key -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-yt-api-key" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube API Key</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-            </div>
+          <div class="flex flex-col gap-2">
+            <label for="fld-yt-api-key" class="section-num">YouTube API Key</label>
+            <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="input-base">
           </div>
 
-          <!-- YouTube Cookie (full width textarea) -->
-          <div class="flex flex-col gap-1.5 md:col-span-2">
-            <label for="fld-yt-cookie" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube Cookie</label>
-            <div class="flex items-start gap-2">
-              <textarea id="fld-yt-cookie" rows="2" readonly placeholder="未设置" class="flex-1 px-3 py-2 rounded-lg text-xs font-mono resize-none" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)"></textarea>
-            </div>
+          <!-- YouTube Cookie -->
+          <div class="flex flex-col gap-2 md:col-span-2">
+            <label for="fld-yt-cookie" class="section-num">YouTube Cookie</label>
+            <textarea id="fld-yt-cookie" rows="2" readonly placeholder="未设置" class="input-base" style="height:auto;padding:10px 12px;resize:none;font-size:11px;"></textarea>
           </div>
 
           <!-- GitHub Token -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-github-token" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">GitHub Token</label>
+          <div class="flex flex-col gap-2">
+            <label for="fld-github-token" class="section-num">GitHub Token</label>
             <div class="flex items-center gap-2">
-              <input id="fld-github-token" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+              <input id="fld-github-token" type="password" value="" placeholder="未设置" readonly class="input-base">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
 
           <!-- GitHub 仓库 -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-github-repo" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">GitHub 仓库</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-github-repo" type="text" value="" placeholder="如 Sweizh/y2b" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-            </div>
+          <div class="flex flex-col gap-2">
+            <label for="fld-github-repo" class="section-num">GitHub 仓库</label>
+            <input id="fld-github-repo" type="text" value="" placeholder="如 Sweizh/y2b" readonly class="input-base">
           </div>
         </div>
 
-        <!-- Save button -->
-        <div class="flex justify-end mt-6">
-          <button data-dom-id="credentials-save-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存</button>
+        <!-- Save -->
+        <div class="flex justify-end mt-8">
+          <button data-dom-id="credentials-save-btn" class="btn-accent" style="padding:0 28px;">保存</button>
         </div>
       </section>
 
       <!-- ============================================================ -->
-      <!-- Section 2: AI 服务接口 (AI Services)                        -->
+      <!-- Section 02: AI 服务接口                                       -->
       <!-- ============================================================ -->
-      <section id="section-ai-services" class="rounded-xl p-6" style="background:var(--apple-card);border:1px solid var(--apple-border);box-shadow:var(--shadow-xs)">
-        <div class="mb-5">
-          <h2 class="text-lg font-semibold" style="color:var(--apple-foreground)">AI 服务接口</h2>
-          <p class="text-sm mt-1" style="color:var(--apple-muted-foreground)">配置语音识别和翻译的 API 端点及密钥。</p>
+      <section id="section-ai-services" class="editorial-section reveal reveal-1">
+        <div class="mb-8">
+          <div class="flex items-baseline gap-3 mb-3">
+            <span class="section-num">02</span>
+            <span class="eyebrow">AI Services</span>
+          </div>
+          <h2 class="display-title" style="font-size:32px;">AI 服务<em>接口</em></h2>
+          <p class="body-muted mt-2" style="max-width:560px;">配置语音识别与翻译的 API 端点及密钥。</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-
-          <!-- 语音识别 API 地址 -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-asr-api-url" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">语音识别 API 地址</label>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+          <div class="flex flex-col gap-2">
+            <label for="fld-asr-api-url" class="section-num">语音识别 API 地址</label>
             <div class="flex items-center gap-2">
-              <input id="fld-asr-api-url" type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-xs font-mono truncate" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+              <input id="fld-asr-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-
-          <!-- 语音识别 API 密钥 -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-asr-api-key" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">语音识别 API 密钥</label>
+          <div class="flex flex-col gap-2">
+            <label for="fld-asr-api-key" class="section-num">语音识别 API 密钥</label>
             <div class="flex items-center gap-2">
-              <input id="fld-asr-api-key" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+              <input id="fld-asr-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-
-          <!-- 翻译 API 地址 -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-translate-api-url" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">翻译 API 地址</label>
+          <div class="flex flex-col gap-2">
+            <label for="fld-translate-api-url" class="section-num">翻译 API 地址</label>
             <div class="flex items-center gap-2">
-              <input id="fld-translate-api-url" type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-xs font-mono truncate" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+              <input id="fld-translate-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-
-          <!-- 翻译 API 密钥 -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-translate-api-key" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">翻译 API 密钥</label>
+          <div class="flex flex-col gap-2">
+            <label for="fld-translate-api-key" class="section-num">翻译 API 密钥</label>
             <div class="flex items-center gap-2">
-              <input id="fld-translate-api-key" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+              <input id="fld-translate-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-
-          <!-- 标题翻译模板 -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-title-template" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">标题翻译模板</label>
-            <input id="fld-title-template" type="text" data-field="title_template" value="" placeholder="支持变量: {channel}(频道名)、{title}(翻译后标题),留空则不翻译不套模板。示例:【{channel}】{title}" readonly class="h-9 px-3 rounded-lg text-xs font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+          <div class="flex flex-col gap-2">
+            <label for="fld-title-template" class="section-num">标题翻译模板</label>
+            <input id="fld-title-template" type="text" data-field="title_template" value="" placeholder="支持变量: {channel}、{title}" readonly class="input-base" style="font-size:11px;">
           </div>
         </div>
 
-        <!-- Save button -->
-        <div class="flex justify-end mt-6">
-          <button data-dom-id="ai-save-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存</button>
+        <div class="flex justify-end mt-8">
+          <button data-dom-id="ai-save-btn" class="btn-accent" style="padding:0 28px;">保存</button>
         </div>
       </section>
 
       <!-- ============================================================ -->
-      <!-- Section 3: 频道管理 (Channel Management)                     -->
+      <!-- Section 03: 频道管理                                          -->
       <!-- ============================================================ -->
-      <section id="section-channels" class="rounded-xl p-6" style="background:var(--apple-card);border:1px solid var(--apple-border);box-shadow:var(--shadow-xs)">
-        <div class="mb-5">
-          <h2 class="text-lg font-semibold" style="color:var(--apple-foreground)">频道管理</h2>
-          <p class="text-sm mt-1" style="color:var(--apple-muted-foreground)">搜索并关注 YouTube 频道，配置自动投稿到 B 站的参数。</p>
+      <section id="section-channels" class="editorial-section reveal reveal-2">
+        <div class="mb-8">
+          <div class="flex items-baseline gap-3 mb-3">
+            <span class="section-num">03</span>
+            <span class="eyebrow">Channels</span>
+          </div>
+          <h2 class="display-title" style="font-size:32px;">频道<em>管理</em></h2>
+          <p class="body-muted mt-2" style="max-width:560px;">搜索并关注 YouTube 频道,配置自动投稿到 B 站的参数。</p>
         </div>
 
-        <!-- Search bar -->
-        <div class="flex items-center gap-3 mb-5">
-          <input type="text" placeholder="输入 YouTube 频道名称或 ID" class="flex-1 h-10 px-4 rounded-lg text-sm" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-          <button data-dom-id="channel-search-btn" class="h-10 px-5 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">搜索频道</button>
+        <div class="flex items-center gap-3 mb-6">
+          <input type="text" placeholder="输入 YouTube 频道名称或 ID" class="input-base" style="height:44px;">
+          <button data-dom-id="channel-search-btn" class="btn-accent shrink-0" style="height:44px;padding:0 24px;">搜索频道</button>
         </div>
 
-        <!-- Channel list (rendered by loadChannels) -->
-        <div id="channels-list" class="mb-4">
-          <div class="rounded-lg px-4 py-8 text-center" style="background:var(--apple-background);border:1px solid var(--apple-border)">
-            <p class="text-sm" style="color:var(--apple-muted-foreground)">加载中…</p>
+        <div id="channels-list" class="mb-6">
+          <div class="surface-card px-4 py-10 text-center">
+            <p style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.08em;">加载中…</p>
           </div>
         </div>
 
-        <!-- Actions -->
         <div class="flex items-center justify-between pt-2">
-          <span class="text-xs" style="color:var(--apple-muted-foreground)">通过上方搜索框添加新频道</span>
-          <button data-dom-id="channels-save-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">保存频道配置</button>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.04em;">通过上方搜索框添加新频道</span>
+          <button data-dom-id="channels-save-btn" class="btn-accent" style="padding:0 28px;">保存频道配置</button>
         </div>
       </section>
 
       <!-- ============================================================ -->
-      <!-- Section 4: 运行状态 (Running Status)                        -->
+      <!-- Section 04: 运行状态                                         -->
       <!-- ============================================================ -->
-      <section id="section-status" class="rounded-xl p-6" style="background:var(--apple-card);border:1px solid var(--apple-border);box-shadow:var(--shadow-xs)">
-        <div class="mb-5">
-          <h2 class="text-lg font-semibold" style="color:var(--apple-foreground)">运行状态</h2>
-          <p class="text-sm mt-1" style="color:var(--apple-muted-foreground)">查看系统运行情况和处理记录。</p>
+      <section id="section-status" class="editorial-section reveal reveal-3">
+        <div class="mb-8">
+          <div class="flex items-baseline gap-3 mb-3">
+            <span class="section-num">04</span>
+            <span class="eyebrow">Status</span>
+          </div>
+          <h2 class="display-title" style="font-size:32px;">运行<em>状态</em></h2>
+          <p class="body-muted mt-2" style="max-width:560px;">查看系统运行情况与处理记录。</p>
         </div>
 
-        <!-- Stats bar -->
-        <div class="grid grid-cols-3 gap-4 mb-5">
-          <div class="rounded-lg px-4 py-3" style="background:var(--apple-background);border:1px solid var(--apple-border)">
-            <p class="text-xs whitespace-nowrap" style="color:var(--apple-muted-foreground)">上次运行</p>
-            <p class="text-sm font-semibold mt-1 font-mono whitespace-nowrap" style="color:var(--apple-foreground)">--</p>
+        <!-- Stats:三栏 mono 数字 -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="surface-card px-5 py-4">
+            <p class="section-num mb-2">上次运行</p>
+            <p style="font-family:var(--font-mono);font-size:14px;font-weight:500;color:var(--fg);white-space:nowrap;">--</p>
           </div>
-          <div class="rounded-lg px-4 py-3" style="background:var(--apple-background);border:1px solid var(--apple-border)">
-            <p class="text-xs whitespace-nowrap" style="color:var(--apple-muted-foreground)">累计处理</p>
-            <p class="text-sm font-semibold mt-1 font-mono whitespace-nowrap" style="color:var(--apple-foreground)">--</p>
+          <div class="surface-card px-5 py-4">
+            <p class="section-num mb-2">累计处理</p>
+            <p style="font-family:var(--font-mono);font-size:14px;font-weight:500;color:var(--fg);white-space:nowrap;">--</p>
           </div>
-          <div class="rounded-lg px-4 py-3" style="background:var(--apple-background);border:1px solid var(--apple-border)">
-            <p class="text-xs whitespace-nowrap" style="color:var(--apple-muted-foreground)">系统状态</p>
-            <div class="mt-1.5">
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style="background:var(--apple-secondary);color:var(--apple-muted-foreground)">--</span>
+          <div class="surface-card px-5 py-4">
+            <p class="section-num mb-2">系统状态</p>
+            <div class="mt-1">
+              <span class="tag tag-muted">--</span>
             </div>
           </div>
         </div>
 
-        <!-- Cookie 状态提示(由 /api/status 的 cookie_status 字段驱动) -->
-        <div data-cookie-hint class="mb-5 text-sm" style="display:none"></div>
+        <!-- Cookie 状态提示 -->
+        <div data-cookie-hint class="mb-6" style="font-size:13px;display:none"></div>
 
-        <!-- Execute Now button -->
-        <div class="mb-5">
-          <button data-dom-id="trigger-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">立即执行</button>
+        <!-- Execute -->
+        <div class="mb-6">
+          <button data-dom-id="trigger-btn" class="btn-accent" style="padding:0 28px;">立即执行</button>
         </div>
 
-        <!-- Processing records table -->
-        <div class="overflow-x-auto rounded-lg" style="border:1px solid var(--apple-border)">
-          <table class="w-full text-sm" style="min-width:580px">
+        <!-- 处理记录表格 -->
+        <div class="overflow-x-auto surface-card mb-8">
+          <table class="table-editorial" style="min-width:580px">
             <thead>
-              <tr style="background:var(--apple-background)">
-                <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:120px">频道</th>
-                <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:160px">视频标题</th>
-                <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:100px">状态</th>
-                <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:100px">时间</th>
-                <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:140px">失败原因</th>
+              <tr>
+                <th scope="col">频道</th>
+                <th scope="col">视频标题</th>
+                <th scope="col">状态</th>
+                <th scope="col">时间</th>
+                <th scope="col">失败原因</th>
               </tr>
             </thead>
             <tbody id="status-records-tbody">
-              <tr><td colspan="5" class="px-4 py-6 text-center text-xs" style="color:var(--apple-muted-foreground)">加载中…</td></tr>
+              <tr><td colspan="5" style="text-align:center;color:var(--fg-dim);font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;">加载中…</td></tr>
             </tbody>
           </table>
         </div>
 
         <!-- 已处理视频列表 -->
-        <div class="mt-6">
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-semibold" style="color:var(--apple-foreground)">已处理视频列表</h3>
-            <p class="text-xs" style="color:var(--apple-muted-foreground)">删除条目后该视频可在下次运行时重新处理</p>
+        <div class="mt-8">
+          <div class="flex items-baseline justify-between mb-4">
+            <h3 class="display-title" style="font-size:18px;">已处理<em>视频</em></h3>
+            <p style="font-family:var(--font-mono);font-size:10px;color:var(--fg-dim);letter-spacing:0.08em;">DELETE → 可重新处理</p>
           </div>
-          <div class="overflow-x-auto rounded-lg" style="border:1px solid var(--apple-border)">
-            <table class="w-full text-sm" style="min-width:680px">
+          <div class="overflow-x-auto surface-card">
+            <table class="table-editorial" style="min-width:680px">
               <thead>
-                <tr style="background:var(--apple-background)">
-                  <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:160px">B 站标题</th>
-                  <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:120px">BV 号</th>
-                  <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:120px">频道</th>
-                  <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:90px">状态</th>
-                  <th scope="col" class="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:120px">处理时间</th>
-                  <th scope="col" class="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style="color:var(--apple-muted-foreground);min-width:80px">操作</th>
+                <tr>
+                  <th scope="col">B 站标题</th>
+                  <th scope="col">BV 号</th>
+                  <th scope="col">频道</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">处理时间</th>
+                  <th scope="col" style="text-align:right;">操作</th>
                 </tr>
               </thead>
               <tbody id="processed-tbody">
-                <tr><td colspan="6" class="px-4 py-6 text-center text-xs" style="color:var(--apple-muted-foreground)">加载中…</td></tr>
+                <tr><td colspan="6" style="text-align:center;color:var(--fg-dim);font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;">加载中…</td></tr>
               </tbody>
             </table>
           </div>
         </div>
 
         <!-- 失败通知配置 -->
-        <div class="mt-6 rounded-lg p-4" style="background:var(--apple-background);border:1px solid var(--apple-border)">
-          <div class="flex items-center justify-between mb-3">
+        <div class="mt-8 surface-card p-5">
+          <div class="flex items-center justify-between mb-4">
             <div>
-              <h3 class="text-sm font-semibold" style="color:var(--apple-foreground)">失败通知</h3>
-              <p class="text-xs mt-0.5" style="color:var(--apple-muted-foreground)">Cookie 失效或流水线连续失败 ≥ 3 次时调用 Webhook 告警</p>
+              <h3 class="display-title" style="font-size:16px;">失败<em>通知</em></h3>
+              <p class="body-muted mt-1" style="font-size:12px;">Cookie 失效或流水线连续失败 ≥ 3 次时调用 Webhook 告警</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="notify-enabled" class="sr-only">
-              <div class="relative w-10 h-5 rounded-full transition-colors" style="background:var(--background-400)">
-                <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-all" style="background:var(--background-50)"></div>
+              <div class="relative" style="width:40px;height:20px;border-radius:10px;background:var(--surface-sunken);border:1px solid var(--border);transition:background 0.15s;">
+                <div style="position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--fg-muted);transition:all 0.2s;"></div>
               </div>
             </label>
           </div>
           <div class="flex items-center gap-3">
-            <input id="notify-webhook-url" type="text" placeholder="https://qyapi.weixin.com/cgi-bin/webhook/send?key=xxx 或 https://sctapi.ftqq.com/SCTxxxxx.send" class="flex-1 h-9 px-3 rounded-lg text-xs" style="background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)" disabled>
-            <button id="notify-save-btn" class="h-9 px-4 rounded-lg text-xs font-semibold shrink-0" style="background:var(--brand-500);color:var(--background-50)" disabled>保存</button>
+            <input id="notify-webhook-url" type="text" placeholder="https://qyapi.weixin.com/cgi-bin/webhook/send?key=xxx" class="input-base" style="font-size:11px;" disabled>
+            <button id="notify-save-btn" class="btn-accent btn-xs shrink-0" disabled>保存</button>
           </div>
         </div>
       </section>
 
       <!-- ============================================================ -->
-      <!-- Section 5: 手动添加视频 (Manual Video Queue)                  -->
+      <!-- Section 05: 手动添加视频                                      -->
       <!-- ============================================================ -->
-      <section id="section-manual" class="rounded-xl p-6" style="background:var(--apple-card);border:1px solid var(--apple-border);box-shadow:var(--shadow-xs)">
-        <div class="mb-5">
-          <h2 class="text-lg font-semibold" style="color:var(--apple-foreground)">手动添加视频</h2>
-          <p class="text-sm mt-1" style="color:var(--apple-muted-foreground)">手动添加 YouTube 视频到处理队列。</p>
+      <section id="section-manual" class="editorial-section reveal reveal-4">
+        <div class="mb-8">
+          <div class="flex items-baseline gap-3 mb-3">
+            <span class="section-num">05</span>
+            <span class="eyebrow">Manual Queue</span>
+          </div>
+          <h2 class="display-title" style="font-size:32px;">手动<em>添加</em></h2>
+          <p class="body-muted mt-2" style="max-width:560px;">手动添加 YouTube 视频到处理队列。</p>
         </div>
 
-        <!-- Input area -->
-        <div class="flex flex-col gap-3 mb-5">
-          <textarea rows="3" placeholder="输入 YouTube 视频 URL，每行一个&#10;支持完整URL、短链接、纯视频ID" class="w-full px-4 py-3 rounded-lg text-sm resize-none" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)"></textarea>
-          <div class="flex items-center gap-3">
-            <select data-dom-id="manual-channel-select" class="h-10 px-3 rounded-lg text-sm shrink-0" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+        <div class="flex flex-col gap-3 mb-6">
+          <textarea rows="3" placeholder="输入 YouTube 视频 URL,每行一个&#10;支持完整 URL、短链接、纯视频 ID" class="input-base" style="height:auto;padding:12px;resize:none;font-size:12px;"></textarea>
+          <div class="flex items-center gap-3 flex-wrap">
+            <select data-dom-id="manual-channel-select" class="input-base shrink-0" style="width:auto;height:44px;">
               <option value="">不指定频道</option>
             </select>
-            <select data-dom-id="manual-season-select" class="h-10 px-3 rounded-lg text-sm shrink-0" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <option value="">不指定合集(用频道默认)</option>
+            <select data-dom-id="manual-season-select" class="input-base shrink-0" style="width:auto;height:44px;">
+              <option value="">不指定合集</option>
             </select>
-            <button data-dom-id="manual-add-btn" class="h-10 px-6 rounded-lg text-sm font-semibold text-white shrink-0 transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">添加到队列</button>
+            <button data-dom-id="manual-add-btn" class="btn-accent shrink-0" style="height:44px;padding:0 24px;">添加到队列</button>
           </div>
         </div>
 
-        <!-- Queue list (rendered by loadManualQueue) -->
         <div id="manual-queue-list" class="flex flex-col gap-2">
-          <div class="rounded-lg px-4 py-6 text-center" style="background:var(--apple-background);border:1px solid var(--apple-border)">
-            <p class="text-sm" style="color:var(--apple-muted-foreground)">加载中…</p>
+          <div class="surface-card px-4 py-8 text-center">
+            <p style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.08em;">加载中…</p>
           </div>
         </div>
       </section>
