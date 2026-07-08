@@ -44,10 +44,10 @@ function getViews() {
 }
 
 function closeMobileMenu() {
-  const items = document.querySelector('.top-nav-items');
-  const overlay = document.getElementById('sidebar-overlay');
-  if (items) items.setAttribute('data-open', 'false');
-  if (overlay) overlay.classList.add('hidden');
+  const panel = document.getElementById('mobile-menu-panel');
+  const overlay = document.getElementById('mobile-menu-overlay');
+  if (panel) panel.setAttribute('data-open', 'false');
+  if (overlay) overlay.setAttribute('data-open', 'false');
 }
 
 function switchView(name) {
@@ -258,25 +258,65 @@ if (cmdkEl) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 6. 移动端 hamburger 菜单
+// 6. 移动端 hamburger 菜单(弹出浮层)
+//    ☰ 触发 #mobile-menu-panel(绝对定位浮层,nav 下方右对齐)
+//    + #mobile-menu-overlay(固定遮罩,点击关闭)。浮层脱离 navbar 文档流。
 // ═══════════════════════════════════════════════════════════════
 
 const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-const sidebarOverlay = document.getElementById('sidebar-overlay');
-const topNavItems = document.querySelector('.top-nav-items');
+const mobileMenuPanel = document.getElementById('mobile-menu-panel');
+const mobileMenuOverlay = document.getElementById('mobile-menu-overlay');
 
-function toggleMobileMenu() {
-  if (!topNavItems) return;
-  const open = topNavItems.getAttribute('data-open') === 'true';
-  topNavItems.setAttribute('data-open', open ? 'false' : 'true');
-  if (sidebarOverlay) sidebarOverlay.classList.toggle('hidden', open);
+// 打开浮层时,根据当前活动视图高亮对应浮层项
+function syncMobileMenuActive() {
+  const activeEl = document.querySelector('.view[data-active="true"]');
+  const activeView = activeEl ? activeEl.getAttribute('data-view') : '';
+  document.querySelectorAll('.mobile-menu-item[data-view-target]').forEach(function (item) {
+    item.setAttribute('data-active', item.getAttribute('data-view-target') === activeView ? 'true' : 'false');
+  });
+}
+
+function openMobileMenu() {
+  if (mobileMenuPanel) mobileMenuPanel.setAttribute('data-open', 'true');
+  if (mobileMenuOverlay) mobileMenuOverlay.setAttribute('data-open', 'true');
+  syncMobileMenuActive();
 }
 
 if (mobileMenuBtn) {
-  mobileMenuBtn.addEventListener('click', toggleMobileMenu);
+  mobileMenuBtn.addEventListener('click', function () {
+    const isOpen = mobileMenuPanel && mobileMenuPanel.getAttribute('data-open') === 'true';
+    if (isOpen) closeMobileMenu(); else openMobileMenu();
+  });
 }
-if (sidebarOverlay) {
-  sidebarOverlay.addEventListener('click', closeMobileMenu);
+if (mobileMenuOverlay) {
+  mobileMenuOverlay.addEventListener('click', closeMobileMenu);
+}
+
+// 移动端浮层视图项:复用 switchView,选择后关闭浮层
+document.querySelectorAll('.mobile-menu-item[data-view-target]').forEach(function (item) {
+  item.addEventListener('click', function () {
+    const view = item.getAttribute('data-view-target');
+    if (view) switchView(view);
+    closeMobileMenu();
+  });
+});
+
+// 移动端主题切换 / 退出登录:复用桌面按钮逻辑,不重复实现 API 调用
+const mobileThemeToggle = document.getElementById('mobile-theme-toggle');
+if (mobileThemeToggle) {
+  mobileThemeToggle.addEventListener('click', function () {
+    const existing = document.querySelector('[data-dom-id="theme-toggle-btn"]');
+    if (existing) existing.click();
+    closeMobileMenu();
+  });
+}
+const mobileLogout = document.getElementById('mobile-logout');
+if (mobileLogout) {
+  mobileLogout.addEventListener('click', function () {
+    const existing = document.querySelector('[data-dom-id="logout-btn"]');
+    if (existing) existing.click();
+    closeMobileMenu();
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════

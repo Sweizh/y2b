@@ -457,7 +457,7 @@ export function initChannels() {
       '</p>' +
       '</div>' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding-top:12px;border-top:1px solid var(--apple-border)">' +
+      '<div class="channel-config-grid" style="gap:12px;padding-top:12px;border-top:1px solid var(--apple-border)">' +
       '<div style="display:flex;flex-direction:column;gap:4px">' +
       '<label for="ch-season_id-' +
       cid +

@@ -2,7 +2,7 @@
 <html lang="zh-CN" class="dark" data-theme="dark" style="color-scheme: dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0c100f">
     <title>YT2BILI · 控制台</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -38,7 +38,7 @@
   <!-- 左侧:品牌 + 4 个主项 -->
   <div class="flex items-center gap-1 md:gap-6">
     <a href="/console.html" class="top-nav-item font-semibold" style="color:var(--foreground);border:0">YT2BILI</a>
-    <div class="top-nav-items" data-open="false">
+    <div class="top-nav-items hidden md:flex">
       <button class="top-nav-item" data-view-target="bili" data-active="true">B 站</button>
       <button class="top-nav-item" data-view-target="youtube">YouTube</button>
       <button class="top-nav-item" data-view-target="general">通用</button>
@@ -47,7 +47,7 @@
   </div>
   <!-- 右侧:Ctrl+K + 主题 + 退出 -->
   <div class="flex items-center gap-2">
-    <button class="top-nav-item" id="cmdk-trigger" title="命令面板 (Ctrl+K)">
+    <button class="top-nav-item hidden md:inline-flex" id="cmdk-trigger" title="命令面板 (Ctrl+K)">
       <span style="font-family:var(--font-mono);font-size:11px">Ctrl K</span>
     </button>
     <button data-dom-id="theme-toggle-btn" class="top-nav-item" aria-label="切换主题">
@@ -56,10 +56,21 @@
     <button data-dom-id="logout-btn" class="top-nav-item" aria-label="退出登录">退出</button>
     <button id="mobile-menu-btn" class="md:hidden top-nav-item" aria-label="打开菜单">☰</button>
   </div>
+
+  <!-- 移动端 hamburger 弹出浮层(nav 作为 position:absolute 定位上下文) -->
+  <div id="mobile-menu-panel">
+    <button class="mobile-menu-item" data-view-target="bili">B 站</button>
+    <button class="mobile-menu-item" data-view-target="youtube">YouTube</button>
+    <button class="mobile-menu-item" data-view-target="general">通用</button>
+    <button class="mobile-menu-item" data-view-target="status">运行状态</button>
+    <div class="mobile-menu-separator"></div>
+    <button class="mobile-menu-item" id="mobile-theme-toggle">切换主题</button>
+    <button class="mobile-menu-item" id="mobile-logout">退出登录</button>
+  </div>
 </nav>
 
-<!-- 移动端菜单遮罩 -->
-<div id="sidebar-overlay" class="fixed inset-0 z-30 hidden" style="background:rgba(0,0,0,0.6);backdrop-filter:blur(2px)"></div>
+<!-- 移动端 hamburger 遮罩(独立于 nav,z-index 低于 nav,点击关闭浮层) -->
+<div id="mobile-menu-overlay"></div>
 
 <!-- ===== Main content:4 个独立视图容器 ===== -->
 <main class="max-w-6xl mx-auto px-4 md:px-6 py-8">
@@ -85,7 +96,7 @@
           </div>
         </div>
         <!-- 修改密码 -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4">
           <div>
             <label class="text-xs mb-1 block" style="color:var(--muted-foreground)">管理密码</label>
             <span data-dom-id="admin-password-status" class="input-base flex items-center" style="color:var(--muted-foreground)">--</span>
@@ -101,7 +112,7 @@
         <button type="button" data-dom-id="bili-manual-toggle" class="collapsible-trigger" data-state="collapsed">
           <span>显示手动凭证</span>
         </button>
-        <div data-dom-id="bili-manual-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" style="display:none">
+        <div data-dom-id="bili-manual-wrap" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4 mt-4" style="display:none">
           <div class="flex flex-col">
             <label for="fld-bili-sessdata" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 SESSDATA</label>
             <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="input-base">
@@ -152,7 +163,7 @@
         <button type="button" data-dom-id="yt-oauth-config-toggle" class="collapsible-trigger" data-state="collapsed">
           <span>OAuth 配置</span>
         </button>
-        <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" style="display:none">
+        <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4 mt-4" style="display:none">
           <div class="flex flex-col">
             <label for="fld-yt-oauth-client-id" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube OAuth Client ID</label>
             <input id="fld-yt-oauth-client-id" type="text" value="" placeholder="未设置" class="input-base">
@@ -170,7 +181,7 @@
 
       <!-- YouTube API Key / Cookie / GitHub Token + 仓库 -->
       <div class="surface-card p-5 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4">
           <div class="flex flex-col">
             <label for="fld-yt-api-key" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube API Key</label>
             <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="input-base">
@@ -225,7 +236,7 @@
       <!-- AI 服务接口 -->
       <div class="surface-card p-5 space-y-4">
         <h2 class="text-base font-medium">AI 服务接口</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4">
           <div class="flex flex-col">
             <label for="fld-asr-api-url" class="text-xs mb-1 block" style="color:var(--muted-foreground)">语音识别 API 地址</label>
             <div class="flex items-center gap-2">

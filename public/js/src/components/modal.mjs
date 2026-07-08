@@ -73,13 +73,14 @@ export function showModal(opts) {
 
   const dialog = document.createElement('div');
   dialog.setAttribute('tabindex', '-1');
+  dialog.className = 'modal-dialog';
   if (isHelp) {
     dialog.style.cssText =
-      'background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;' +
+      'background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;' +
       'max-width:560px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-2xl)';
   } else {
     dialog.style.cssText =
-      'background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;' +
+      'background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;' +
       'max-width:400px;width:100%;box-shadow:var(--shadow-2xl)';
   }
 

@@ -24,7 +24,8 @@ app.get('/init-status', async (c) => {
 // KV 的 put 不支持 CAS,这里用 "先 get lock 再 put config" 缩短竞态窗口
 // lock 有 30s TTL,避免异常退出导致永久死锁
 const INIT_LOCK_KEY = 'init_lock';
-const INIT_LOCK_TTL = 30;
+// Cloudflare KV expirationTtl 最低 60s,30 会触发 400 Invalid expiration_ttl
+const INIT_LOCK_TTL = 60;
 
 app.post('/config/init', async (c) => {
   const requestId = c.req.header('x-request-id') || crypto.randomUUID();

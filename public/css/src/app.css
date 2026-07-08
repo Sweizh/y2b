@@ -41,6 +41,7 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    padding-bottom: env(safe-area-inset-bottom); /* 底部安全区 */
   }
   /* 无 grain 纹理 */
   a { text-decoration: none; }
@@ -57,15 +58,16 @@
   width: 100%;
   display: flex;
   align-items: center;
-  height: 3.5rem; /* h-14 */
+  height: calc(3.5rem + env(safe-area-inset-top)); /* h-14 + 状态栏安全区 */
   padding: 0 1rem;
+  padding-top: env(safe-area-inset-top);
   border-bottom: 1px solid var(--border);
-  background: color-mix(in oklch, var(--background) 95%, transparent);
+  background: color-mix(in oklch, var(--background) 80%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
 @media (min-width: 768px) {
-  .top-nav { padding: 0 1.5rem; }
+  .top-nav { padding-left: 1.5rem; padding-right: 1.5rem; }
 }
 
 .top-nav-item {
@@ -86,18 +88,72 @@
 .top-nav-item[data-active="true"]::after {
   content: "";
   position: absolute;
-  left: 0.75rem;
-  right: 0.75rem;
+  left: 0;
+  right: 0;
   bottom: -1px;
   height: 2px;
   background: var(--foreground);
 }
 
-/* 移动端隐藏,hamburger 展开 */
-.top-nav-items { display: none; }
-.top-nav-items[data-open="true"] { display: flex; }
+/* 桌面端 .top-nav-items 由 Tailwind hidden md:flex 控制(移动隐藏,桌面显示) */
+
+/* ═══════════════════════════════════════════════════════════════
+   Mobile hamburger popover(移动端弹出浮层)
+   ═══════════════════════════════════════════════════════════════ */
+#mobile-menu-panel {
+  display: none;
+  position: absolute;
+  top: calc(3.5rem + env(safe-area-inset-top)); /* navbar 高度 + 安全区 */
+  right: 0.5rem;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+  padding: 0.5rem;
+  z-index: 45;
+  min-width: 200px;
+}
+#mobile-menu-panel[data-open="true"] { display: flex; }
+
+.mobile-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 0.625rem 0.75rem;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--foreground);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-height: 44px; /* 触摸目标 */
+  text-align: left;
+  width: 100%;
+}
+.mobile-menu-item:hover { background: var(--accent); }
+.mobile-menu-item[data-active="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.mobile-menu-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 0.25rem 0;
+}
+
+#mobile-menu-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 44;
+}
+#mobile-menu-overlay[data-open="true"] { display: block; }
+
+/* 桌面端隐藏移动浮层与遮罩 */
 @media (min-width: 768px) {
-  .top-nav-items { display: flex; }
+  #mobile-menu-panel, #mobile-menu-overlay { display: none !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -446,3 +502,34 @@
    ═══════════════════════════════════════════════════════════════ */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ═══════════════════════════════════════════════════════════════
+   Mobile touch targets & narrow-screen adjustments
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .btn-accent, .btn-ghost { min-height: 44px; }
+  .btn-xs { min-height: 40px; }
+}
+
+/* Modal 基础 padding(原内联,移至 class 以支持响应式) */
+.modal-dialog { padding: 24px; }
+@media (max-width: 479px) {
+  .modal-dialog, [class*="modal"] { padding: 16px; }
+}
+
+/* 频道卡片配置网格响应式:移动单列 / sm 双列 / md 三列 */
+.channel-config-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 640px) {
+  .channel-config-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (min-width: 768px) {
+  .channel-config-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
