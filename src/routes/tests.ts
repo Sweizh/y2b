@@ -44,11 +44,11 @@ app.post('/asr', async (c) => {
         max_tokens: 8,
       }),
     });
-    // opaqueredirect:服务端返回了重定向,manual 模式下无法读 body
-    if (resp.type === 'opaqueredirect' || resp.status === 0) {
+    // opaqueredirect / 3xx:服务端返回了重定向,manual 模式下无法读 body
+    if (resp.type === 'opaqueredirect' || resp.status === 0 || (resp.status >= 300 && resp.status < 400)) {
       return c.json({
         success: false,
-        message: `ASR 端点返回重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
+        message: `ASR 端点返回 ${resp.status} 重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
       });
     }
     if (!resp.ok) {
@@ -89,11 +89,11 @@ app.post('/translate', async (c) => {
         max_tokens: 16,
       }),
     });
-    // opaqueredirect:服务端返回了重定向,manual 模式下无法读 body
-    if (resp.type === 'opaqueredirect' || resp.status === 0) {
+    // opaqueredirect / 3xx:服务端返回了重定向,manual 模式下无法读 body
+    if (resp.type === 'opaqueredirect' || resp.status === 0 || (resp.status >= 300 && resp.status < 400)) {
       return c.json({
         success: false,
-        message: `翻译端点返回重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
+        message: `翻译端点返回 ${resp.status} 重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
       });
     }
     if (!resp.ok) {
