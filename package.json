@@ -8,7 +8,8 @@
     "setup": "node scripts/setup.mjs",
     "postinstall": "node scripts/setup.mjs",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build:frontend": "node scripts/build-frontend.mjs",
+    "deploy": "npm run build:frontend && wrangler deploy",
     "tail": "wrangler tail"
   },
   "dependencies": {
@@ -18,7 +19,10 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",
+    "@tailwindcss/cli": "^4.3.1",
     "@types/bcryptjs": "^2.4.6",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.3.1",
     "typescript": "^5.7.3",
     "wrangler": "^3.99.0"
   }

@@ -1,0 +1,96 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./components.css";
+
+/* ── Tailwind v4 theme mapping + base layer (migrated from console.html <style type="text/tailwindcss">, lines 373-411) ── */
+  @theme inline {
+    --color-background: var(--apple-background);
+    --color-foreground: var(--apple-foreground);
+    --color-card: var(--apple-card);
+    --color-card-foreground: var(--apple-card-foreground);
+    --color-popover: var(--apple-popover);
+    --color-popover-foreground: var(--apple-popover-foreground);
+    --color-primary: var(--apple-primary);
+    --color-primary-foreground: var(--apple-primary-foreground);
+    --color-secondary: var(--apple-secondary);
+    --color-secondary-foreground: var(--apple-secondary-foreground);
+    --color-muted: var(--apple-muted);
+    --color-muted-foreground: var(--apple-muted-foreground);
+    --color-accent: var(--apple-accent);
+    --color-accent-foreground: var(--apple-accent-foreground);
+    --color-destructive: var(--apple-destructive);
+    --color-destructive-foreground: var(--apple-destructive-foreground);
+    --color-border: var(--apple-border);
+    --color-input: var(--apple-input);
+    --color-ring: var(--apple-ring);
+    --color-chart-1: var(--apple-chart-1);
+    --color-chart-2: var(--apple-chart-2);
+    --color-chart-3: var(--apple-chart-3);
+    --color-chart-4: var(--apple-chart-4);
+    --color-chart-5: var(--apple-chart-5);
+    --color-sidebar: var(--apple-sidebar);
+    --color-sidebar-foreground: var(--apple-sidebar-foreground);
+    --color-sidebar-primary: var(--apple-sidebar-primary);
+    --color-sidebar-primary-foreground: var(--apple-sidebar-primary-foreground);
+    --color-sidebar-accent: var(--apple-sidebar-accent);
+    --color-sidebar-accent-foreground: var(--apple-sidebar-accent-foreground);
+  }
+  @layer base {
+    body { background: var(--apple-background); color: var(--apple-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+
+/* ── .no-scrollbar (migrated from console.html lines 412-415) ── */
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Mobile sidebar responsive (migrated from console.html lines 882-901) ── */
+  @media (max-width: 1023px) {
+    main {
+      margin-left: 0 !important;
+    }
+    aside {
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+    }
+    aside.open {
+      transform: translateX(0);
+    }
+    #mobile-menu-btn {
+      display: flex !important;
+    }
+    #sidebar-overlay.open {
+      display: block !important;
+    }
+  }
+
+/* ── Keyframes: toast-in / modal-fade (migrated from console.html lines 2777-2780) ── */
+  @keyframes toast-in { from { opacity:0; transform:translateX(8px);} to {opacity:1; transform:translateX(0);} }
+  @keyframes modal-fade { from { opacity:0;} to {opacity:1;} }
+
+/* ── Mobile accessibility: safe area + touch targets (Task 7) ── */
+  /* 底部安全区:适配 iPhone 等有 Home Indicator 的设备 */
+  @media (max-width: 1023px) {
+    body {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+
+  /* 触控热区:所有图标按钮、开关、导航项在移动端 ≥ 44×44px
+     通过 padding 扩展命中区域,不改变视觉尺寸 */
+  @media (max-width: 1023px) {
+    button[aria-label],
+    a[aria-label],
+    [role="switch"],
+    .mobile-menu-btn,
+    #mobile-menu-btn {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
+  /* 表格移动端横向滚动:确保列宽不被压缩 */
+  .overflow-x-auto table {
+    min-width: 600px;
+  }

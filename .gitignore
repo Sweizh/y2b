@@ -2,8 +2,14 @@
 node_modules/
 
 # 构建产物
-dist/
+/dist/
 .wrangler/
+
+# 前端构建产物(由 npm run build:frontend 生成,不入库;仅保留 .gitkeep 占位)
+public/css/dist/*
+!public/css/dist/.gitkeep
+public/js/dist/*
+!public/js/dist/.gitkeep
 
 # Python 缓存
 __pycache__/
