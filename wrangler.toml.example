@@ -4,6 +4,14 @@ compatibility_date = "2024-12-01"
 # 启用 workers.dev 子域(默认 true,但某些账号默认禁用,显式启用确保可访问)
 workers_dev = true
 
+# 可观测性:启用 Workers Logs
+# 部署后在 Cloudflare Dashboard → Worker → Logs 标签查看,
+# 也可用 `wrangler tail` 实时查看。代码里的 console.log 会被捕获。
+# invocation_logs = true 记录每次调用的元数据(方法/路径/状态/耗时)
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 # 静态资源目录：部署时通过 [site] 配置打包进 Worker
 # 参考 https://developers.cloudflare.com/workers/static-assets/
 [site]
