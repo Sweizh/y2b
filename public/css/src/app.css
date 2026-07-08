@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "./tokens.css";
-@import "./components.css";
 
 /* ── Tailwind v4 theme mapping + base layer (migrated from console.html <style type="text/tailwindcss">, lines 373-411) ── */
   @theme inline {

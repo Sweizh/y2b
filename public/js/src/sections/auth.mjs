@@ -4,33 +4,25 @@
 //   Auth check (/api/init-status → /api/config probe)   (lines 1113-1133)
 //   Logout button → showModal confirm → POST /api/logout  (lines 1205-1225)
 //   openBiliQrcodeLogin()  — QR modal + countdown + poll   (lines 2398-2510)
-//   openBiliPopupLogin()   — popup + cookie-paste modal    (lines 2511-2641)
 //   openYtOAuthLogin()     — window.open + postMessage     (lines 2642-2670)
 //   openChangePasswordModal() — old/new password modal     (lines 2671-2748)
 //   Button bindings (bili/yt/change-pwd + OAuth config)    (lines 2749-2776)
 //
 // Public API:
 //   initAuth()                 → run auth check + bind all auth/login buttons.
-//   openBiliQrcodeLogin()      → QR-code login flow (exported for reuse; not
-//                                bound to a button in the original — only
-//                                called recursively by its own refresh button).
-//   openBiliPopupLogin()       → popup + cookie-paste login flow.
+//   openBiliQrcodeLogin()      → QR-code login flow (走 Vercel 代理绕过 CF 风控).
 //   openYtOAuthLogin()         → YouTube OAuth popup flow.
 //   openChangePasswordModal()  → change admin password modal.
 //
 // Preserved contracts (CRITICAL):
 //   - data-dom-id selectors: logout-btn, bili-qrcode-login, yt-oauth-login,
 //     change-password-btn, yt-oauth-config-toggle, yt-oauth-config-wrap.
-//     NOTE: the task brief listed "bili-qrcode-btn / bili-cookie-btn /
-//     yt-oauth-btn" but those IDs do NOT exist in console.html. The real
-//     bindings (verified by grep of console.html lines 510-600 & 2750-2771)
-//     are preserved here verbatim:
-//       [data-dom-id="bili-qrcode-login"]  → openBiliPopupLogin
+//       [data-dom-id="bili-qrcode-login"]  → openBiliQrcodeLogin (扫码登录)
 //       [data-dom-id="yt-oauth-login"]     → openYtOAuthLogin
 //       [data-dom-id="change-password-btn"] → openChangePasswordModal
 //   - API paths: /api/init-status, /api/config, /api/logout,
 //     /api/bili/login/qrcode, /api/bili/login/qrcode/status,
-//     /api/bili/login/cookie, /api/youtube/oauth/start,
+//     /api/youtube/oauth/start,
 //     /api/auth/change-password (verified against src/routes/auth.ts:131
 //     app.post('/auth/change-password'); the brief's "/api/change-password"
 //     was a shorthand — the actual frontend + backend path is /api/auth/*).
@@ -237,132 +229,6 @@ export function openBiliQrcodeLogin() {
     .catch(function (e) {
       showToast('获取二维码失败:' + (e.message || e), 'error');
     });
-}
-
-/**
- * B 站弹窗登录(用户侧浏览器登录 + 从 Network 面板复制 cookie 回传)。
- * 备选方案:扫码登录修复后优先用扫码;此弹窗登录作为备选。
- * 为什么不从 Console 复制 document.cookie: SESSDATA 是 HttpOnly,
- *   document.cookie 读不到 SESSDATA,只能拿到 bili_jct 等非 HttpOnly 字段。
- * 改用从 Network 面板复制请求头 cookie:请求头会包含完整 cookie(含 HttpOnly)。
- * Faithful to console.html lines 2511-2641.
- */
-export function openBiliPopupLogin() {
-  var popup = window.open('https://passport.bilibili.com/login', 'bili-login-popup', 'width=1024,height=700');
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;animation:modal-fade .18s ease';
-  var dialog = document.createElement('div');
-  dialog.style.cssText = 'background:var(--apple-card);color:var(--apple-card-foreground);border-radius:16px;padding:24px;max-width:520px;width:100%;box-shadow:var(--shadow-2xl);max-height:90vh;overflow-y:auto';
-  var title = document.createElement('h3');
-  title.style.cssText = 'font-size:16px;font-weight:600;margin:0 0 12px';
-  title.textContent = '弹窗登录 B 站';
-  var steps = document.createElement('ol');
-  steps.style.cssText = 'font-size:13px;line-height:1.7;margin:0 0 12px;padding-left:20px;color:var(--apple-foreground)';
-  steps.innerHTML = '<li>在弹出的窗口中正常登录 B 站(账号密码/扫码均可)</li>' +
-    '<li>登录成功后,在 B 站任意页面按 <kbd>F12</kbd> 打开开发者工具</li>' +
-    '<li>切到 <kbd>Network</kbd>(网络)标签,刷新页面(F5)</li>' +
-    '<li>点击列表中任意一个请求(如 <code>nav</code>、<code>index.html</code>)</li>' +
-    '<li>在右侧 <kbd>Headers</kbd> → <kbd>Request Headers</kbd> 中找到 <code>cookie:</code> 行,右键复制值</li>' +
-    '<li>回到本窗口,在下方输入框粘贴(<kbd>Ctrl/Cmd+V</kbd>),点「保存 Cookie」</li>';
-  var warn = document.createElement('div');
-  warn.style.cssText = 'background:var(--apple-muted);border-left:3px solid var(--state-warning);padding:8px 12px;margin:0 0 12px;font-size:12px;color:var(--apple-foreground);border-radius:4px;line-height:1.5';
-  warn.innerHTML = '<b>注意:</b> 不要从 Console 执行 <code>document.cookie</code> 复制! B 站的 <code>SESSDATA</code> 是 <b>HttpOnly</b>,JS 读不到,只能从 Network 面板的请求头复制完整 cookie。';
-  var reopenBtn = document.createElement('button');
-  reopenBtn.textContent = '重开登录窗';
-  reopenBtn.style.cssText = 'height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:12px;margin-bottom:12px';
-  reopenBtn.onclick = function () {
-    try { popup.close(); } catch (e) {}
-    popup = window.open('https://passport.bilibili.com/login', 'bili-login-popup', 'width=1024,height=700');
-    showToast('已重新打开 B 站登录页', 'info');
-  };
-  // cookie 粘贴输入框
-  var pasteLabel = document.createElement('label');
-  pasteLabel.textContent = '在此粘贴从 Network 面板复制的 cookie 字符串:';
-  pasteLabel.style.cssText = 'display:block;font-size:13px;font-weight:500;margin-bottom:4px;color:var(--apple-foreground)';
-  var pasteBox = document.createElement('textarea');
-  pasteBox.placeholder = '粘贴此处(形如 SESSDATA=xxx,%2C...; bili_jct=xxx; buvid3=xxx; ...)';
-  pasteBox.style.cssText = 'width:100%;height:100px;font-family:var(--font-mono);font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--apple-border);background:var(--background-50);color:var(--apple-foreground);resize:vertical;margin-bottom:8px';
-  pasteBox.onclick = function () { pasteBox.select(); };
-  var statusP = document.createElement('p');
-  statusP.style.cssText = 'font-size:13px;margin:8px 0 4px;min-height:18px;color:var(--apple-muted-foreground)';
-  var saveBtn = document.createElement('button');
-  saveBtn.textContent = '保存 Cookie';
-  saveBtn.style.cssText = 'height:36px;padding:0 16px;border-radius:8px;border:none;background:var(--brand-500);color:var(--background-50);cursor:pointer;font-size:13px;margin-right:8px';
-  var closeBtn = document.createElement('button');
-  closeBtn.textContent = '取消';
-  closeBtn.style.cssText = 'height:36px;padding:0 16px;border-radius:8px;border:1px solid var(--apple-border);background:transparent;color:var(--apple-foreground);cursor:pointer;font-size:13px';
-  var actionRow = document.createElement('div');
-  actionRow.style.cssText = 'display:flex;gap:8px;margin-top:8px';
-  actionRow.appendChild(saveBtn);
-  actionRow.appendChild(closeBtn);
-  var tip = document.createElement('p');
-  tip.style.cssText = 'font-size:11px;margin:12px 0 0;color:var(--apple-muted-foreground);line-height:1.5';
-  tip.innerHTML = '提示: B 站封禁了 Worker 服务器 IP,只能由你的浏览器登录后复制 cookie 回传。cookie 仅含 SESSDATA/bili_jct/buvid3,加密存储于 KV。<br>移动端浏览器若无法打开 F12,可用 via 浏览器或 PC 模式访问。';
-  dialog.appendChild(title);
-  dialog.appendChild(steps);
-  dialog.appendChild(warn);
-  dialog.appendChild(reopenBtn);
-  dialog.appendChild(pasteLabel);
-  dialog.appendChild(pasteBox);
-  dialog.appendChild(statusP);
-  dialog.appendChild(actionRow);
-  dialog.appendChild(tip);
-  overlay.appendChild(dialog);
-  document.body.appendChild(overlay);
-  function cleanup() {
-    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-  }
-  function saveCookie() {
-    var cookieStr = pasteBox.value.trim();
-    if (!cookieStr) {
-      statusP.textContent = '请先粘贴 cookie 字符串';
-      statusP.style.color = 'var(--state-error)';
-      return;
-    }
-    if (cookieStr.indexOf('SESSDATA=') < 0) {
-      statusP.textContent = 'cookie 中缺少 SESSDATA。请确认从 Network 面板的请求头复制(非 Console 的 document.cookie)';
-      statusP.style.color = 'var(--state-error)';
-      return;
-    }
-    if (cookieStr.indexOf('bili_jct=') < 0) {
-      statusP.textContent = 'cookie 中缺少 bili_jct,请确认已登录 B 站';
-      statusP.style.color = 'var(--state-error)';
-      return;
-    }
-    saveBtn.disabled = true;
-    saveBtn.textContent = '保存中...';
-    statusP.textContent = '正在保存...';
-    statusP.style.color = 'var(--brand-500)';
-    apiPost('/api/bili/login/cookie', { cookie: cookieStr })
-      .then(function (r) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = '保存 Cookie';
-        if (r.success) {
-          cleanup();
-          try { popup.close(); } catch (err) {}
-          showToast(r.message || ('B 站登录成功:' + (r.uname || '')), 'success');
-          refreshConfigDisplay();
-          // 调 /api/test/bili 进一步验证
-          apiFetch('/api/test/bili', { method: 'POST' })
-            .then(function (t) { if (t && t.success) showToast('B 站凭证验证: ' + (t.message || '有效'), 'success'); else if (t) showToast('凭证验证: ' + (t.message || '未通过'), 'warning'); })
-            .catch(function () {});
-        } else {
-          statusP.textContent = r.error || '保存失败';
-          statusP.style.color = 'var(--state-error)';
-        }
-      })
-      .catch(function (e) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = '保存 Cookie';
-        statusP.textContent = '保存失败:' + (e.message || e);
-        statusP.style.color = 'var(--state-error)';
-      });
-  }
-  saveBtn.onclick = saveCookie;
-  closeBtn.onclick = cleanup;
-  overlay.onclick = function (e) { if (e.target === overlay) cleanup(); };
-  document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { cleanup(); document.removeEventListener('keydown', esc); } }, { once: true });
-  setTimeout(function () { pasteBox.focus(); }, 100);
 }
 
 /**
@@ -640,7 +506,6 @@ export function initAuth() {
 
   // ===== 绑定 OAuth/QR/修改密码 按钮事件 =====
   // bili-qrcode-login → openBiliQrcodeLogin (扫码登录,走 Vercel 代理绕过风控)
-  //   原 openBiliPopupLogin(弹窗+复制cookie)作为备选保留,但不再绑定到主按钮
   // yt-oauth-login     → openYtOAuthLogin
   // change-password-btn → openChangePasswordModal
   var biliQrBtn = document.querySelector('[data-dom-id="bili-qrcode-login"]');

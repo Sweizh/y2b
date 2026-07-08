@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark" data-theme="dark">
+<html lang="zh-CN" class="dark" data-theme="dark" style="color-scheme: dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
     <title>YT2BILI 管理后台</title>
+    <link rel="preconnect" href="https://unpkg.com">
     <link rel="stylesheet" href="/css/dist/app.css">
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <script src="/js/qrcode.js"></script>
@@ -73,23 +75,23 @@
 
     <!-- Nav Items -->
     <nav class="flex-1 flex flex-col gap-1 px-3" aria-label="Dashboard navigation">
-      <a data-dom-id="nav-credentials" href="#section-credentials" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--brand-500);background:var(--brand-50)">
+      <a href="#section-credentials" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--brand-500);background:var(--brand-50)">
         <i data-lucide="user" style="width:18px;height:18px"></i>
         <span>账号凭证</span>
       </a>
-      <a data-dom-id="nav-ai-services" href="#section-ai-services" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
+      <a href="#section-ai-services" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
         <i data-lucide="box" style="width:18px;height:18px"></i>
         <span>AI 服务</span>
       </a>
-      <a data-dom-id="nav-channels" href="#section-channels" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
+      <a href="#section-channels" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
         <i data-lucide="folder-open" style="width:18px;height:18px"></i>
         <span>频道管理</span>
       </a>
-      <a data-dom-id="nav-status" href="#section-status" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
+      <a href="#section-status" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
         <i data-lucide="circle-play" style="width:18px;height:18px"></i>
         <span>运行状态</span>
       </a>
-      <a data-dom-id="nav-manual" href="#section-manual" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
+      <a href="#section-manual" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150" style="color:var(--apple-foreground)">
         <i data-lucide="circle-plus" style="width:18px;height:18px"></i>
         <span>手动添加</span>
       </a>
@@ -216,7 +218,6 @@
             <label for="fld-yt-api-key" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube API Key</label>
             <div class="flex items-center gap-2">
               <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
@@ -225,7 +226,6 @@
             <label for="fld-yt-cookie" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube Cookie</label>
             <div class="flex items-start gap-2">
               <textarea id="fld-yt-cookie" rows="2" readonly placeholder="未设置" class="flex-1 px-3 py-2 rounded-lg text-xs font-mono resize-none" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)"></textarea>
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
