@@ -171,7 +171,7 @@
       flex-wrap: wrap;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script src="/js/qrcode.js"></script>
 </head>
 <body>
   <div class="container">
@@ -186,6 +186,14 @@
       <div class="meta-item">
         <span class="meta-label">部署域:</span>
         <span class="meta-value" id="meta-host">--</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">B站端点:</span>
+        <select id="endpoint-select" style="background:#1a1a1a;color:#e5e5e5;border:1px solid #404040;border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;">
+          <option value="bilibili">passport.bilibili.com(默认)</option>
+          <option value="biligame">passport.biligame.com(DSA CDN)</option>
+          <option value="tv" disabled>passport.snm0516.aisee.tv(TV 登录,需 appkey 签名,待实现)</option>
+        </select>
       </div>
     </div>
 
@@ -228,6 +236,7 @@
     var btnFetch = document.getElementById('btn-fetch');
     var btnRefresh = document.getElementById('btn-refresh');
     var btnClearLog = document.getElementById('btn-clear-log');
+    var endpointSelect = document.getElementById('endpoint-select');
     var qrcodeWrap = document.getElementById('qrcode-wrap');
     var qrcodeImg = document.getElementById('qrcode-img');
     var countdownEl = document.getElementById('countdown');
@@ -237,8 +246,21 @@
     var metaRegion = document.getElementById('meta-region');
     var metaHost = document.getElementById('meta-host');
 
+    // ====== API 基址 ======
+    // 在 Vercel 域上用相对路径;在 Cloudflare 主站上跨域调 Vercel Edge Function
+    // VERCEL_API_BASE:指向部署了 Edge Function 的 Vercel 域(部署后按需替换)
+    var VERCEL_API_BASE = 'https://y2b-six.vercel.app';
+    var API_BASE = (location.host.indexOf('vercel.app') >= 0) ? '' : VERCEL_API_BASE;
+
+    function endpointParam() {
+      return '?endpoint=' + encodeURIComponent(endpointSelect.value);
+    }
+
     // ====== 元信息 ======
     metaHost.textContent = location.host;
+    if (API_BASE) {
+      log('INFO', '跨域模式:本页在 ' + location.host + ',API 走 Vercel: ' + VERCEL_API_BASE, '');
+    }
     // 通过 fetch /bili/qrcode 响应头里的 x-vercel-id 拿 region,首次 fetch 后更新
 
     // ====== 日志 ======
@@ -278,8 +300,8 @@
       btnFetch.textContent = '获取中…';
       setStatus('正在请求 Vercel Edge → B 站 passport.qrcode/generate …', 'info');
 
-      log('FETCH', 'GET /bili/qrcode', '');
-      fetch('/bili/qrcode', { method: 'GET' })
+      log('FETCH', 'GET ' + API_BASE + '/bili/qrcode' + endpointParam(), '');
+      fetch(API_BASE + '/bili/qrcode' + endpointParam(), { method: 'GET' })
         .then(function (resp) {
           // 从响应头读 Vercel region
           var region = resp.headers.get('x-vercel-id') || '';
@@ -379,7 +401,7 @@
     function startPolling() {
       pollTimer = setInterval(function () {
         if (!qrcodeKey) return;
-        fetch('/bili/qrcode-status?qrcode_key=' + encodeURIComponent(qrcodeKey))
+        fetch(API_BASE + '/bili/qrcode-status?qrcode_key=' + encodeURIComponent(qrcodeKey) + '&endpoint=' + encodeURIComponent(endpointSelect.value))
           .then(function (resp) {
             return resp.text().then(function (text) {
               try { return JSON.parse(text); }

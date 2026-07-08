@@ -74,7 +74,9 @@ app.use('*', secureHeaders({
     styleSrc: ["'self'", "'unsafe-inline'"],  // Tailwind 内联样式
     imgSrc: ["'self'", 'data:', 'https:'],     // YouTube 头像等外部图
     fontSrc: ["'self'", 'data:'],
-    connectSrc: ["'self'"],                     // 关键:阻断 XSS 向外部域外泄
+    // connect-src:同源为主;额外允许 Vercel 代理域(供 /bili-test.html 跨域调 Edge Function)
+    // 注:Vercel Edge Function 只返回公开 B 站二维码数据(GET,无 cookie),风险极低
+    connectSrc: ["'self'", "https://y2b-six.vercel.app"],
     frameAncestors: ["'none'"],                 // 防点击劫持
     baseUri: ["'self'"],
     formAction: ["'self'"],
@@ -206,6 +208,7 @@ app.get('/', (c) => serveStatic(c, '/'));
 app.get('/index.html', (c) => serveStatic(c, '/index.html'));
 app.get('/login.html', (c) => serveStatic(c, '/login.html'));
 app.get('/console.html', (c) => serveStatic(c, '/console.html'));
+app.get('/bili-test.html', (c) => serveStatic(c, '/bili-test.html'));
 // 静态构建产物:CSS / JS bundle
 app.get('/css/*', (c) => serveStatic(c, new URL(c.req.url).pathname));
 app.get('/js/*', (c) => serveStatic(c, new URL(c.req.url).pathname));
