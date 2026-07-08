@@ -17,19 +17,14 @@ import { getRawConfig, putConfig } from '../kv';
 const app = new Hono<{ Bindings: Env }>();
 
 const BILI_NAV_URL = 'https://api.bilibili.com/x/web-interface/nav';
-const BILI_QRCODE_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate';
-const BILI_QRCODE_INFO = 'https://passport.bilibili.com/x/passport-login/web/qrcode/poll';
 const BILI_FINGER_SPI = 'https://api.bilibili.com/x/frontend/finger/spi';
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+// Vercel Edge Function 代理 URL(已验证可绕过 B 站对 Cloudflare Worker IP 的 -412 风控)
+// 2026-07-08 实测:Cloudflare Worker 直连 passport.bilibili.com 会被风控,
+// 走 Vercel Edge 代理(hnd1 东京节点)可正常拿到二维码和扫码状态
+const VERCEL_BILI_PROXY = 'https://y2b-six.vercel.app';
 
-// B 站 passport 端点请求头
-// 注意:不能带 Referer/Origin!Worker fetch 带 Referer/Origin 会被 B 站识别为
-// 伪造的浏览器请求(IP/指纹不匹配),返回 -412 "request was banned"。
-// 只带 UA 反而能通(B 站把简单请求当脚本放行)。实测验证 2026-07-08。
-const BILI_PASSPORT_HEADERS: Record<string, string> = {
-  'User-Agent': UA,
-};
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 function log(event: string, status: string, extra: Record<string, any> = {}) {
   console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, status, ...extra }));
@@ -41,36 +36,35 @@ function getRequestId(c: any): string {
 
 // 生成二维码
 // 返回 { qrcode_url, qrcode_key, expires_at }
+// 走 Vercel Edge 代理绕过 Cloudflare Worker IP 的 -412 风控
 app.get('/qrcode', async (c) => {
   const requestId = getRequestId(c);
   const start = Date.now();
   try {
-    // 只带 UA,不带 Referer/Origin/Cookie(实测:带这些头会被 B 站风控 -412)
-    const resp = await fetch(BILI_QRCODE_URL, {
-      headers: BILI_PASSPORT_HEADERS,
-      redirect: 'manual',
+    // 调 Vercel Edge Function /bili/qrcode(已验证可绕过风控)
+    const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/qrcode?endpoint=bilibili`, {
+      headers: { 'User-Agent': UA },
     });
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
       const body = await resp.text();
       log('bili_qrcode', 'failed', { requestId, status: resp.status, contentType: ct, bodyPreview: body.slice(0, 200) });
-      return c.json({ error: `B 站返回非 JSON(status=${resp.status}, type=${ct})` }, 502);
+      return c.json({ error: `Vercel 代理返回非 JSON(status=${resp.status}, type=${ct})` }, 502);
     }
     const data = await resp.json() as any;
-    if (data.code !== 0) {
-      log('bili_qrcode', 'failed', { requestId, code: data.code, message: data.message });
-      return c.json({ error: data.message || '获取二维码失败', bili_code: data.code }, 502);
+    if (data.error) {
+      log('bili_qrcode', 'failed', { requestId, error: data.error, bili_code: data.bili_code, bili_message: data.bili_message });
+      return c.json({ error: data.bili_message || data.error, bili_code: data.bili_code }, 502);
     }
-    const d = data.data || {};
-    log('bili_qrcode', 'success', { requestId, duration: Date.now() - start });
+    log('bili_qrcode', 'success', { requestId, vercelRegion: data.vercelRegion, duration: Date.now() - start });
     return c.json({
-      qrcode_url: d.url || '',
-      qrcode_key: d.qrcode_key || '',
-      expires_at: Math.floor(Date.now() / 1000) + 180,
+      qrcode_url: data.qrcode_url || '',
+      qrcode_key: data.qrcode_key || '',
+      expires_at: data.expires_at || Math.floor(Date.now() / 1000) + 180,
     });
   } catch (e: any) {
     log('bili_qrcode', 'error', { requestId, error: e.message });
-    return c.json({ error: '请求 B 站失败:' + (e.message || e) }, 502);
+    return c.json({ error: '请求 Vercel 代理失败:' + (e.message || e) }, 502);
   }
 });
 
@@ -104,6 +98,7 @@ async function getBuvid3(requestId: string): Promise<{ buvid3: string; source: s
 
 // 查询登录状态
 // 返回 { status: 'waiting'|'scanned'|'success'|'expired'|'error', uname?, message? }
+// 走 Vercel Edge 代理绕过 Cloudflare Worker IP 的 -412 风控
 app.get('/qrcode/status', async (c) => {
   const requestId = getRequestId(c);
   const start = Date.now();
@@ -112,54 +107,53 @@ app.get('/qrcode/status', async (c) => {
     return c.json({ error: '缺少 qrcode_key 参数' }, 400);
   }
   try {
-    // 只带 UA,不带 Cookie(实测:带 buvid3 Cookie 会触发 B 站风控 -412)
-    const resp = await fetch(`${BILI_QRCODE_INFO}?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
-      headers: BILI_PASSPORT_HEADERS,
-      redirect: 'manual',
+    // 调 Vercel Edge Function /bili/qrcode-status(已验证可绕过风控)
+    const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/qrcode-status?qrcode_key=${encodeURIComponent(qrcodeKey)}&endpoint=bilibili&login_type=web`, {
+      headers: { 'User-Agent': UA },
     });
-    // 检查响应是否为 JSON
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
       const body = await resp.text();
       log('bili_qrcode_status', 'failed', { requestId, status: resp.status, contentType: ct, bodyPreview: body.slice(0, 200) });
-      return c.json({ status: 'error', message: `B 站返回非 JSON(status=${resp.status})` });
+      return c.json({ status: 'error', message: `Vercel 代理返回非 JSON(status=${resp.status})` });
     }
     const data = await resp.json() as any;
-    // poll 接口返回结构: {"code":0,"data":{"code":86101,"url":"","message":"未扫码"}}
-    //   - 顶层 code: 0=HTTP 请求成功(不代表登录成功)
-    //   - data.code: 真正的扫码状态码
-    //     86101 = 未扫码
-    //     86090 = 已扫码,且若 data.url 非空则表示已确认登录成功
-    //     86039 = 二维码已过期
-    const dataCode = data?.data?.code;
-    if (dataCode === 86101) {
-      return c.json({ status: 'waiting', message: data?.data?.message || '等待扫码' });
+    // Vercel Edge Function 已处理状态码映射,直接透传 status
+    if (data.status === 'waiting') {
+      return c.json({ status: 'waiting', message: data.message || '等待扫码' });
     }
-    if (dataCode === 86090) {
-      // 已扫码。data.url 非空表示已确认登录(url 含 crossDomain 跳转地址,带 cookie 参数)
-      const crossDomainUrl = data?.data?.url;
-      if (!crossDomainUrl) {
-        return c.json({ status: 'scanned', message: '已扫码,请在手机上确认' });
+    if (data.status === 'scanned') {
+      return c.json({ status: 'scanned', message: '已扫码,请在手机上确认' });
+    }
+    if (data.status === 'expired') {
+      return c.json({ status: 'expired', message: '二维码已过期' });
+    }
+    if (data.status === 'success') {
+      // 登录成功:Vercel 代理已解析 crossDomainUrl,返回了 sessdata/bili_jct/dede_user_id
+      // 但仍需走 parseBiliLoginCookies 流程:补 buvid3、调 nav 拿 uname、加密写 KV
+      const sessdata = data.sessdata || '';
+      const biliJct = data.bili_jct || '';
+      if (!sessdata || !biliJct) {
+        return c.json({ status: 'error', message: 'Vercel 代理返回 success 但缺少 sessdata/bili_jct' });
       }
-      // 登录成功,解析 cookie
+      // 构造 crossDomainUrl 走原有解析流程(补 buvid3 + nav + 加密写 KV)
+      const crossDomainUrl = data.crossDomainUrl || `https://passport.biligame.com/x/passport-login/web/crossDomain?DedeUserID=${encodeURIComponent(data.dede_user_id || '')}&SESSDATA=${encodeURIComponent(sessdata)}&bili_jct=${encodeURIComponent(biliJct)}`;
       const parsed = await parseBiliLoginCookies(crossDomainUrl, c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '', requestId);
       if (!parsed.ok) {
         return c.json({ status: 'error', message: parsed.error || '解析登录信息失败' });
       }
-      log('bili_qrcode_status', 'success', { requestId, uname: parsed.uname, duration: Date.now() - start });
+      log('bili_qrcode_status', 'success', { requestId, uname: parsed.uname, vercelRegion: data.vercelRegion, duration: Date.now() - start });
       return c.json({
         status: 'success',
         uname: parsed.uname || '',
         message: '登录成功',
       });
     }
-    if (dataCode === 86039) {
-      return c.json({ status: 'expired', message: '二维码已过期' });
-    }
-    return c.json({ status: 'error', message: data?.data?.message || `未知状态码 ${dataCode}` });
+    // Vercel 代理返回 error 或未知状态
+    return c.json({ status: 'error', message: data.message || `Vercel 代理返回未知状态: ${data.status}` });
   } catch (e: any) {
     log('bili_qrcode_status', 'error', { requestId, error: e.message });
-    return c.json({ status: 'error', message: '请求 B 站失败:' + (e.message || e) });
+    return c.json({ status: 'error', message: '请求 Vercel 代理失败:' + (e.message || e) });
   }
 });
 

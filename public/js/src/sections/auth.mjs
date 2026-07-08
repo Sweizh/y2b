@@ -134,8 +134,23 @@ export function openBiliQrcodeLogin() {
       title.style.cssText = 'font-size:16px;font-weight:600;margin:0 0 12px';
       title.textContent = '扫码登录 B 站';
       var img = document.createElement('img');
-      img.src = d.qrcode_url;
-      img.style.cssText = 'width:220px;height:220px;border-radius:8px;border:1px solid var(--apple-border);display:block;margin:0 auto';
+      // qrcode_url 是扫码跳转网页 URL,不是图片,需用 QR 库转成二维码图片
+      // 全局 qrcode 函数由 /js/qrcode.js 提供(console.html 已引入)
+      if (typeof qrcode !== 'undefined') {
+        try {
+          var qr = qrcode(0, 'M');
+          qr.addData(d.qrcode_url);
+          qr.make();
+          img.src = qr.createDataURL(8, 2);
+        } catch (e) {
+          showToast('二维码生成失败:' + (e.message || e), 'error');
+          return;
+        }
+      } else {
+        showToast('QR 库未加载,无法显示二维码', 'error');
+        return;
+      }
+      img.style.cssText = 'width:220px;height:220px;border-radius:8px;border:1px solid var(--apple-border);display:block;margin:0 auto;background:#fff';
       var statusP = document.createElement('p');
       statusP.style.cssText = 'font-size:13px;margin:12px 0 4px;color:var(--apple-muted-foreground)';
       statusP.textContent = '请使用 B 站 App 扫描二维码';
@@ -624,12 +639,12 @@ export function initAuth() {
   }
 
   // ===== 绑定 OAuth/QR/修改密码 按钮事件 =====
-  // 实际 data-dom-id 与绑定关系(console.html lines 2750-2771):
-  //   bili-qrcode-login  → openBiliPopupLogin (按钮文案「弹窗登录 B 站」)
-  //   yt-oauth-login     → openYtOAuthLogin
-  //   change-password-btn → openChangePasswordModal
+  // bili-qrcode-login → openBiliQrcodeLogin (扫码登录,走 Vercel 代理绕过风控)
+  //   原 openBiliPopupLogin(弹窗+复制cookie)作为备选保留,但不再绑定到主按钮
+  // yt-oauth-login     → openYtOAuthLogin
+  // change-password-btn → openChangePasswordModal
   var biliQrBtn = document.querySelector('[data-dom-id="bili-qrcode-login"]');
-  if (biliQrBtn) biliQrBtn.addEventListener('click', openBiliPopupLogin);
+  if (biliQrBtn) biliQrBtn.addEventListener('click', openBiliQrcodeLogin);
   var ytOAuthBtn = document.querySelector('[data-dom-id="yt-oauth-login"]');
   if (ytOAuthBtn) ytOAuthBtn.addEventListener('click', openYtOAuthLogin);
   // 检测按钮:bili-check-btn / yt-check-btn
