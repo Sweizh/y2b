@@ -33,3 +33,6 @@ y2b_blog.txt
 
 # Trae spec 元数据(本地工作流,不入库)
 .trae/
+
+# Vercel 项目元数据(含个人 token,不入库)
+.vercel/

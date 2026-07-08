@@ -1,0 +1,48 @@
+# 告诉 Vercel 哪些文件不部署(减少部署体积 + 避免误触发)
+# 参考: https://vercel.com/docs/deployments/build-output#vercelignore
+
+# Cloudflare Worker 源码(Vercel 不用)
+src/
+
+# 构建脚本(Vercel 不用)
+scripts/
+
+# Python 虚拟环境
+.venv/
+
+# GitHub Actions
+.github/
+
+# Trae 工作流元数据
+.trae/
+
+# 设计稿原始上传
+.uploads/
+
+# Cloudflare 本地缓存
+.wrangler/
+
+# 文档
+*.md
+
+# Cloudflare 配置(Vercel 不读)
+wrangler.toml
+wrangler.toml.example
+
+# 本地环境变量
+.dev.vars*
+.dev.vars.example
+
+# TypeScript 配置(Vercel Edge Function 自动处理)
+tsconfig.json
+
+# 依赖(Vercel 会自己 install)
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# 测试 / 临时文件
+*.log
+.DS_Store

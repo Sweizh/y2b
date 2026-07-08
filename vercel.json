@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "outputDirectory": "public",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/bili/qrcode", "destination": "/api/bili-qrcode" },
+    { "source": "/bili/qrcode-status", "destination": "/api/bili-qrcode-status" }
+  ]
+}

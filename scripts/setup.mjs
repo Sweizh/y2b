@@ -43,6 +43,12 @@ const env = { ...devVars, ...process.env };
 // 生产环境(Cloudflare Git 部署或 CI):必须显式配置 CLOUDFLARE_KV_ID,未配置则报错退出
 // 本地开发:未配置时用 local-dev-simulation,wrangler dev 会用本地 KV 模拟
 const isCI = !!env.CI || !!env.CLOUDFLARE_BUILD_ID;
+// Vercel 构建环境:跳过 Cloudflare 配置生成(Vercel 不需要 wrangler.toml)
+// VERCEL=1 是 Vercel 构建环境默认注入的系统环境变量
+if (env.VERCEL) {
+  console.log('[setup] Vercel environment detected, skipping wrangler.toml generation');
+  process.exit(0);
+}
 const kvId = env.CLOUDFLARE_KV_ID || (isCI ? '' : 'local-dev-simulation');
 const kvPreviewId = env.CLOUDFLARE_KV_PREVIEW_ID || kvId;
 

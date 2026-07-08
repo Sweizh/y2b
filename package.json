@@ -10,7 +10,8 @@
     "dev": "wrangler dev",
     "build:frontend": "node scripts/build-frontend.mjs",
     "deploy": "npm run build:frontend && wrangler deploy",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "vercel:dev": "vercel dev --listen 3000"
   },
   "dependencies": {
     "@cloudflare/kv-asset-handler": "^0.3.0",
