@@ -32,24 +32,6 @@ const BILI_PASSPORT_HEADERS: Record<string, string> = {
   'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 };
 
-// 从 c.env 读取中转代理配置(绕过 CF IP 风控)
-// 配置 BILI_PROXY_URL 后,所有 B 站 passport 调用走反代脚本(scripts/bili_proxy.py),
-// 反代经 Clash 出口转发,Worker 不再直连 B 站(直连会返回 -412 风控)
-type ProxyConfig = { url: string; token: string } | null;
-function getProxyConfig(env: Env): ProxyConfig {
-  const url = (env as any).BILI_PROXY_URL;
-  const token = (env as any).BILI_PROXY_TOKEN;
-  if (url && token) {
-    return { url: url.replace(/\/$/, ''), token };
-  }
-  return null;
-}
-
-// 构造代理请求头(反代脚本用 X-Proxy-Token 鉴权)
-function proxyHeaders(proxy: ProxyConfig): Record<string, string> {
-  return proxy ? { 'X-Proxy-Token': proxy.token } : {};
-}
-
 function log(event: string, status: string, extra: Record<string, any> = {}) {
   console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, status, ...extra }));
 }
@@ -63,65 +45,38 @@ function getRequestId(c: any): string {
 app.get('/qrcode', async (c) => {
   const requestId = getRequestId(c);
   const start = Date.now();
-  const proxy = getProxyConfig(c.env);
   try {
-    let resp: Response;
-    if (proxy) {
-      // 走中转代理:反代脚本内部处理 buvid3 + 风控头 + Clash 出口
-      resp = await fetch(`${proxy.url}/qrcode`, {
-        headers: proxyHeaders(proxy),
-        redirect: 'manual',
-      });
-    } else {
-      // 直连 B 站(无代理时,会被 CF IP 风控返回 -412)
-      const { buvid3, source: buvid3Source } = await getBuvid3(requestId, c.env);
-      const headers = { ...BILI_PASSPORT_HEADERS };
-      headers['Cookie'] = `buvid3=${buvid3}`;
-      resp = await fetch(BILI_QRCODE_URL, {
-        headers,
-        redirect: 'manual',
-      });
-      // 直连模式保留诊断字段
-      const ct0 = resp.headers.get('content-type') || '';
-      if (!ct0.includes('application/json')) {
-        const body = await resp.text();
-        log('bili_qrcode', 'failed', { requestId, status: resp.status, contentType: ct0, bodyPreview: body.slice(0, 200) });
-        return c.json({ error: `B 站返回非 JSON(status=${resp.status}, type=${ct0})`, hint: 'CF IP 被风控,需配置 BILI_PROXY_URL 中转代理' }, 502);
-      }
-      const data0 = await resp.json() as any;
-      if (data0.code !== 0) {
-        log('bili_qrcode', 'failed', { requestId, code: data0.code, message: data0.message });
-        return c.json({
-          error: data0.message || '获取二维码失败',
-          hint: 'CF IP 被风控,需配置 BILI_PROXY_URL 中转代理(反代脚本经 Clash 出口调 B 站)',
-          debug: { bili_code: data0.code },
-        }, 502);
-      }
-      const d0 = data0.data || {};
-      log('bili_qrcode', 'success', { requestId, duration: Date.now() - start, via: 'direct' });
-      return c.json({
-        qrcode_url: d0.url || '',
-        qrcode_key: d0.qrcode_key || '',
-        expires_at: Math.floor(Date.now() / 1000) + 180,
-      });
-    }
-    // 代理模式:响应即为 B 站原始 JSON
+    // B 站 passport 端点需要 buvid3 cookie 否则风控返回 "request was banned"
+    const { buvid3, source: buvid3Source } = await getBuvid3(requestId);
+    const headers = { ...BILI_PASSPORT_HEADERS };
+    headers['Cookie'] = `buvid3=${buvid3}`;
+    const resp = await fetch(BILI_QRCODE_URL, {
+      headers,
+      // 不自动跟随重定向(B 站可能 302 到 HTML 登录页)
+      redirect: 'manual',
+    });
+    // 检查响应是否为 JSON,避免 HTML 解析报错
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
       const body = await resp.text();
-      log('bili_qrcode', 'failed', { requestId, status: resp.status, contentType: ct, bodyPreview: body.slice(0, 200), via: 'proxy' });
-      return c.json({ error: `代理返回非 JSON(status=${resp.status})`, bodyPreview: body.slice(0, 200) }, 502);
+      log('bili_qrcode', 'failed', { requestId, status: resp.status, contentType: ct, bodyPreview: body.slice(0, 200) });
+      return c.json({ error: `B 站返回非 JSON(status=${resp.status}, type=${ct})` }, 502);
     }
     const data = await resp.json() as any;
     if (data.code !== 0) {
-      log('bili_qrcode', 'failed', { requestId, code: data.code, message: data.message, via: 'proxy' });
-      return c.json({ error: data.message || '获取二维码失败', bili_code: data.code }, 502);
+      log('bili_qrcode', 'failed', { requestId, code: data.code, message: data.message });
+      // 诊断信息:帮助排查 "request was banned"
+      const buvid3Preview = buvid3.slice(0, 20);
+      const buvid3HasInfoc = buvid3.includes('infoc') ? 'yes' : 'no';
+      return c.json({ error: data.message || '获取二维码失败', debug: { buvid3_source: buvid3Source, buvid3_preview: buvid3Preview, has_infoc: buvid3HasInfoc, bili_code: data.code } }, 502);
     }
+    // data.data: { url, qrcode_key, webUrl(可选) }
     const d = data.data || {};
-    log('bili_qrcode', 'success', { requestId, duration: Date.now() - start, via: 'proxy' });
+    log('bili_qrcode', 'success', { requestId, duration: Date.now() - start });
     return c.json({
       qrcode_url: d.url || '',
       qrcode_key: d.qrcode_key || '',
+      // B 站不直接返回过期时间,文档约定 180s,这里加 30s 余量
       expires_at: Math.floor(Date.now() / 1000) + 180,
     });
   } catch (e: any) {
@@ -133,24 +88,23 @@ app.get('/qrcode', async (c) => {
 // 获取 buvid3:调 finger/spi 接口拿真实设备指纹
 // buvid3 格式如 "AF0E8DB1-...-36043infoc",是 B 站风控必需的
 // 随机 UUID 不带 infoc 后缀会被风控拒绝("request was banned")
-async function getBuvid3(requestId: string, env?: Env): Promise<{ buvid3: string; source: string }> {
-  const proxy = env ? getProxyConfig(env) : null;
+async function getBuvid3(requestId: string): Promise<{ buvid3: string; source: string }> {
   try {
-    const resp = proxy
-      ? await fetch(`${proxy.url}/buvid`, { headers: proxyHeaders(proxy) })
-      : await fetch(BILI_FINGER_SPI, { headers: { 'User-Agent': UA } });
+    const resp = await fetch(BILI_FINGER_SPI, {
+      headers: { 'User-Agent': UA },
+    });
     const ct = resp.headers.get('content-type') || '';
     if (ct.includes('application/json')) {
       const data = await resp.json() as any;
       if (data.code === 0 && data.data?.b_3) {
-        return { buvid3: data.data.b_3 as string, source: proxy ? 'spi_via_proxy' : 'spi' };
+        return { buvid3: data.data.b_3 as string, source: 'spi' };
       }
-      log('bili_finger', 'warning', { requestId, code: data.code, message: data.message, via: proxy ? 'proxy' : 'direct' });
+      log('bili_finger', 'warning', { requestId, code: data.code, message: data.message });
     } else {
-      log('bili_finger', 'warning', { requestId, status: resp.status, contentType: ct, via: proxy ? 'proxy' : 'direct' });
+      log('bili_finger', 'warning', { requestId, status: resp.status, contentType: ct });
     }
   } catch (e: any) {
-    log('bili_finger', 'warning', { requestId, error: e.message, via: proxy ? 'proxy' : 'direct' });
+    log('bili_finger', 'warning', { requestId, error: e.message });
   }
   // 兜底:生成格式正确的 buvid3(UUID + 5位数字 + infoc 后缀)
   // finger/spi 接口从 Cloudflare Worker 可能也被风控,用本地生成兜底
@@ -169,24 +123,13 @@ app.get('/qrcode/status', async (c) => {
     return c.json({ error: '缺少 qrcode_key 参数' }, 400);
   }
   try {
-    const proxy = getProxyConfig(c.env);
-    let resp: Response;
-    if (proxy) {
-      // 走中转代理:反代脚本处理 buvid3 + 风控头 + Clash 出口
-      resp = await fetch(`${proxy.url}/poll?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
-        headers: proxyHeaders(proxy),
-        redirect: 'manual',
-      });
-    } else {
-      // 直连 B 站(无代理时,会被 CF IP 风控)
-      const { buvid3 } = await getBuvid3(requestId, c.env);
-      const pollHeaders = { ...BILI_PASSPORT_HEADERS };
-      pollHeaders['Cookie'] = `buvid3=${buvid3}`;
-      resp = await fetch(`${BILI_QRCODE_INFO}?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
-        headers: pollHeaders,
-        redirect: 'manual',
-      });
-    }
+    const { buvid3 } = await getBuvid3(requestId);
+    const pollHeaders = { ...BILI_PASSPORT_HEADERS };
+    pollHeaders['Cookie'] = `buvid3=${buvid3}`;
+    const resp = await fetch(`${BILI_QRCODE_INFO}?qrcode_key=${encodeURIComponent(qrcodeKey)}`, {
+      headers: pollHeaders,
+      redirect: 'manual',
+    });
     // 检查响应是否为 JSON
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
@@ -212,7 +155,7 @@ app.get('/qrcode/status', async (c) => {
         return c.json({ status: 'scanned', message: '已扫码,请在手机上确认' });
       }
       // 登录成功,解析 cookie
-      const parsed = await parseBiliLoginCookies(crossDomainUrl, c.env, requestId);
+      const parsed = await parseBiliLoginCookies(crossDomainUrl, c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '', requestId);
       if (!parsed.ok) {
         return c.json({ status: 'error', message: parsed.error || '解析登录信息失败' });
       }
@@ -279,7 +222,7 @@ app.post('/cookie', async (c) => {
     // buvid3: 优先用用户提交的;若没有则从 finger/spi 获取或本地生成兜底
     let finalBuvid3 = buvid3FromCookie;
     if (!finalBuvid3) {
-      const { buvid3: fallback, source } = await getBuvid3(requestId, c.env);
+      const { buvid3: fallback, source } = await getBuvid3(requestId);
       finalBuvid3 = fallback;
       log('bili_cookie_buvid3', 'fallback', { requestId, source });
     }
@@ -359,7 +302,8 @@ function parseCookieString(s: string): Record<string, string> {
 //   https://passport.biligame.com/x/passport-login/web/crossDomain?DedeUserID=xxx&SESSDATA=xxx&bili_jct=xxx&...
 async function parseBiliLoginCookies(
   crossDomainUrl: string,
-  env: Env,
+  kv: KVNamespace,
+  encryptionKey: string,
   requestId: string,
 ): Promise<{ ok: boolean; uname?: string; error?: string }> {
   try {
@@ -370,12 +314,8 @@ async function parseBiliLoginCookies(
       return { ok: false, error: 'crossDomain URL 中缺少 SESSDATA 或 bili_jct' };
     }
 
-    const kv = env.YT2BILI_KV;
-    const encryptionKey = env.ENCRYPTION_KEY || '';
-    const proxy = getProxyConfig(env);
-
     // buvid3:用统一的 getBuvid3 函数(优先调 finger/spi,失败用本地生成兜底)
-    const { buvid3 } = await getBuvid3(requestId, env);
+    const { buvid3 } = await getBuvid3(requestId);
 
     // ac_time_value:从 SESSDATA 解码 JWT-like payload 取 exp
     // SESSDATA 实际格式是 base64url payload(非标准 JWT,无 signature 段)
@@ -389,23 +329,20 @@ async function parseBiliLoginCookies(
     }
 
     // 调 nav 接口拿账号名 + 校验登录是否真成功
-    // 有代理时走代理(反代脚本用 Clash 出口调 B 站,绕过 CF IP 风控)
     let uname = '';
     try {
-      const cookieStr = `SESSDATA=${sessdata}; bili_jct=${biliJct}; buvid3=${buvid3}`;
-      const navResp = proxy
-        ? await fetch(`${proxy.url}/nav?cookie=${encodeURIComponent(cookieStr)}`, {
-            headers: proxyHeaders(proxy),
-          })
-        : await fetch(BILI_NAV_URL, {
-            headers: { 'Cookie': cookieStr, 'User-Agent': UA },
-          });
+      const navResp = await fetch(BILI_NAV_URL, {
+        headers: {
+          'Cookie': `SESSDATA=${sessdata}; bili_jct=${biliJct}; buvid3=${buvid3}`,
+          'User-Agent': UA,
+        },
+      });
       const navData = await navResp.json() as any;
       if (navData.code === 0 && navData.data?.isLogin) {
         uname = navData.data.uname || '';
       } else {
         // nav 接口未确认登录,但 cookie 已拿到。仍写入,但警告
-        log('bili_nav', 'warning', { requestId, code: navData.code, message: navData.message, via: proxy ? 'proxy' : 'direct' });
+        log('bili_nav', 'warning', { requestId, code: navData.code, message: navData.message });
       }
     } catch (e) {
       log('bili_nav', 'warning', { requestId, error: (e as Error).message });
