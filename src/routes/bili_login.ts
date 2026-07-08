@@ -85,6 +85,50 @@ app.get('/qrcode', async (c) => {
   }
 });
 
+// 临时调试端点:诊断 Worker fetch 调 B 站为什么 -412
+// 测试多种 fetch 配置,返回每种的结果,定位是请求头/TLS/还是其他问题
+app.get('/debug', async (c) => {
+  const results: any[] = [];
+  const biliUrl = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header';
+
+  // 1. 纯 fetch(无自定义头)
+  try {
+    const r = await fetch(biliUrl);
+    const body = await r.text();
+    results.push({ test: '1_pure_fetch', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
+  } catch (e: any) { results.push({ test: '1_pure_fetch', error: e.message }); }
+
+  // 2. 只带 UA
+  try {
+    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA } });
+    const body = await r.text();
+    results.push({ test: '2_ua_only', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
+  } catch (e: any) { results.push({ test: '2_ua_only', error: e.message }); }
+
+  // 3. 完整头(当前代码风格)
+  try {
+    const r = await fetch(biliUrl, { headers: BILI_PASSPORT_HEADERS });
+    const body = await r.text();
+    results.push({ test: '3_full_headers', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
+  } catch (e: any) { results.push({ test: '3_full_headers', error: e.message }); }
+
+  // 4. 完整头 + redirect follow(而非 manual)
+  try {
+    const r = await fetch(biliUrl, { headers: BILI_PASSPORT_HEADERS, redirect: 'follow' });
+    const body = await r.text();
+    results.push({ test: '4_full_follow', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
+  } catch (e: any) { results.push({ test: '4_full_follow', error: e.message }); }
+
+  // 5. 用 httpbin 看 Worker fetch 实际发出的请求头
+  try {
+    const r = await fetch('https://httpbin.org/headers');
+    const data = await r.json() as any;
+    results.push({ test: '5_echo_headers', workerSentHeaders: data.headers });
+  } catch (e: any) { results.push({ test: '5_echo_headers', error: e.message }); }
+
+  return c.json({ results });
+});
+
 // 获取 buvid3:调 finger/spi 接口拿真实设备指纹
 // buvid3 格式如 "AF0E8DB1-...-36043infoc",是 B 站风控必需的
 // 随机 UUID 不带 infoc 后缀会被风控拒绝("request was banned")
