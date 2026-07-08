@@ -62,6 +62,9 @@ def worker_get(path: str) -> dict:
     """调用 Worker GET 接口(带 Bearer Token)"""
     url = f"{WORKER_URL}{path}"
     resp = requests.get(url, headers={"Authorization": f"Bearer {PIPELINE_TOKEN}"}, timeout=30)
+    if resp.status_code >= 400:
+        # 记录响应体便于诊断:区分 Cloudflare 边缘 403(HTML)与应用层 401(JSON)
+        log("worker_get", "http_error", path=path, status=resp.status_code, body=resp.text[:500])
     resp.raise_for_status()
     return resp.json()
 
@@ -78,6 +81,8 @@ def worker_post(path: str, body: dict) -> dict:
         json=body,
         timeout=30,
     )
+    if resp.status_code >= 400:
+        log("worker_post", "http_error", path=path, status=resp.status_code, body=resp.text[:500])
     resp.raise_for_status()
     return resp.json()
 
@@ -721,6 +726,7 @@ def main():
     system_status = "normal"
     error_summary = ""
     cookie_expiring = False  # 默认未过期;try 块中根据 ac_time_value 更新
+    exit_code = 0  # 默认成功;任何异常导致流程未完成则 exit 1,让 GitHub Actions step 失败(不再伪装 success)
 
     # GitHub Actions 超时会发 SIGTERM,Python 默认 disposition 直接终止进程,
     # 不执行 finally 块。注册处理器抛 SystemExit 以触发 main 的 finally 回写状态。
@@ -895,6 +901,7 @@ def main():
         if system_status == "normal":
             system_status = "error"
         log("pipeline", "terminated", error=str(e)[:200])
+        exit_code = 1
 
     except Exception as e:
         # 任何未预期异常都走到这里(注意上面 raise 也会到这)
@@ -903,6 +910,7 @@ def main():
         if system_status == "normal":
             system_status = "error"
         log("pipeline", "error", error=str(e)[:200])
+        exit_code = 1
 
     finally:
         # 无论成功失败都回写最终状态,Worker 才能感知本次运行结果
@@ -915,6 +923,8 @@ def main():
         # 若 /processed 已标记 expired(上传报错),Worker 侧 /status 会保留更严重的 expired
         cookie_status = "expiring" if cookie_expiring else "ok"
         _writeback_final_status(system_status, error_summary, cookie_status)
+
+    sys.exit(exit_code)
 
 
 def _writeback_final_status(system_status: str, error_summary: str,
