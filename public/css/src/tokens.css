@@ -1,149 +1,151 @@
-/*
- * YT2BILI — Editorial Broadcasting Console
- * 美学方向:印刷杂志 × 终端工作站
- * 字体:Fraunces (display serif) + IBM Plex Sans (body) + JetBrains Mono
- * 色板:深墨绿底 + 暖琥珀 accent + 报纸暖白
- *
- * 设计原则:
- *   - 唯一强调色是琥珀,极少使用(主按钮、关键状态)
- *   - 大号衬线标题带斜体强调词,像杂志栏目
- *   - terminal-style mono 标签 // 01 — 账号凭证
- *   - 表格用极简横线(无竖线),像报纸版面
- *   - 暖白文字(非纯白),模拟印刷纸张
- */
+/* ===== Geist font loading (Google Fonts) ===== */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
 
-/* ===== PRIMITIVE PALETTE ===== */
+/* ============================================================
+   YT2BILI — Design Tokens
+   oklch pure grayscale + Geist, shadcn-style semantic tokens
+   Visual system modeled on https://api.sweizh.top
+   ============================================================ */
+
 :root {
+  /* ===== Light theme — semantic tokens (oklch grayscale) ===== */
+  --background: oklch(99.5% 0 0);
+  --foreground: oklch(18% 0 0);
+  --card: oklch(100% 0 0);
+  --card-foreground: oklch(18% 0 0);
+  --popover: oklch(100% 0 0);
+  --popover-foreground: oklch(18% 0 0);
+  --primary: oklch(22% 0 0);
+  --primary-foreground: oklch(98% 0 0);
+  --secondary: oklch(97% 0 0);
+  --secondary-foreground: oklch(22% 0 0);
+  --muted: oklch(97% 0 0);
+  --muted-foreground: oklch(52% 0 0);
+  --accent: oklch(96% 0 0);
+  --accent-foreground: oklch(22% 0 0);
+  --destructive: oklch(57.7% .245 27.325);
+  --border: oklch(92% 0 0);
+  --ring: oklch(55% 0 0);
+  --sidebar: oklch(98% 0 0);
+  --sidebar-foreground: oklch(18% 0 0);
+  --sidebar-primary: oklch(22% 0 0);
+  --sidebar-primary-foreground: oklch(98% 0 0);
+  --sidebar-accent: oklch(96% 0 0);
+  --sidebar-accent-foreground: oklch(22% 0 0);
+  --sidebar-border: oklch(92% 0 0);
+  --sidebar-ring: oklch(55% 0 0);
+  --input: oklch(92% 0 0);
 
-  /* solo-design consumption aliases (兼容旧引用,映射到新语义) */
-  --apple-background: var(--bg);
-  --apple-foreground: var(--fg);
-  --apple-card: var(--surface);
-  --apple-card-foreground: var(--fg);
-  --apple-popover: var(--surface-elevated);
-  --apple-popover-foreground: var(--fg);
-  --apple-primary: var(--accent);
-  --apple-primary-foreground: var(--bg);
-  --apple-secondary: var(--surface-sunken);
-  --apple-secondary-foreground: var(--fg-muted);
-  --apple-muted: var(--surface-sunken);
-  --apple-muted-foreground: var(--fg-muted);
+  /* ===== State colors (Tailwind v4 palette) ===== */
+  --success: oklch(59.6% .145 163.225);       /* emerald-600 */
+  --warning: oklch(66.6% .179 58.318);        /* amber-600 */
+  --success-surface: oklch(59.6% .145 163.225 / 0.10);
+  --warning-surface: oklch(66.6% .179 58.318 / 0.10);
+  --destructive-surface: oklch(57.7% .245 27.325 / 0.10);
+
+  /* ===== Typography =====
+     "Geist Variable" / "Geist Mono Variable" are the Vercel self-host
+     names; the Google Fonts import above exposes "Geist" / "Geist Mono",
+     kept next in the stack so the font actually loads from the CDN. */
+  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ===== Radius (shadcn) ===== */
+  --radius-sm: 0.25rem;
+  --radius: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.75rem;
+
+  /* ===== Backward-compat aliases — keep JS inline styles working ===== */
+
+  /* --apple-* (full shadcn semantic mapping) */
+  --apple-background: var(--background);
+  --apple-foreground: var(--foreground);
+  --apple-card: var(--card);
+  --apple-card-foreground: var(--card-foreground);
+  --apple-popover: var(--popover);
+  --apple-popover-foreground: var(--popover-foreground);
+  --apple-primary: var(--primary);
+  --apple-primary-foreground: var(--primary-foreground);
+  --apple-secondary: var(--secondary);
+  --apple-secondary-foreground: var(--secondary-foreground);
+  --apple-muted: var(--muted);
+  --apple-muted-foreground: var(--muted-foreground);
   --apple-accent: var(--accent);
-  --apple-accent-foreground: var(--bg);
-  --apple-destructive: var(--danger);
-  --apple-destructive-foreground: var(--bg);
+  --apple-accent-foreground: var(--accent-foreground);
+  --apple-destructive: var(--destructive);
+  --apple-destructive-foreground: var(--primary-foreground);
   --apple-border: var(--border);
-  --apple-input: var(--border-strong);
-  --apple-ring: var(--accent);
-  --apple-sidebar: var(--sidebar-bg);
-  --apple-sidebar-foreground: var(--fg-muted);
+  --apple-input: var(--input);
+  --apple-ring: var(--ring);
+  --apple-sidebar: var(--sidebar);
+  --apple-sidebar-foreground: var(--sidebar-foreground);
 
-  /* ===== 核心色板 (Editorial Broadcasting) ===== */
-  --bg: #0c100f;              /* 深墨绿黑,带极轻绿调 */
-  --surface: #131817;         /* 卡片底,略亮 */
-  --surface-elevated: #1a201f;/* 弹层/悬浮 */
-  --surface-sunken: #0a0d0c;  /* 凹陷区(输入框) */
-  --sidebar-bg: #080a09;     /* 侧栏更深,像印刷油墨 */
+  /* --brand-* */
+  --brand-500: var(--primary);
+  --brand-400: var(--primary);
+  --brand-50: var(--accent);
 
-  --fg: #e8e4dc;             /* 报纸暖白,非纯白 */
-  --fg-muted: #8a8478;       /* 暖灰,像旧纸张 */
-  --fg-dim: #5a5650;         /* 极暗暖灰,辅助文字 */
-
-  --border: #2a2f2d;         /* 主边框,暖灰 */
-  --border-strong: #3a403e;  /* 输入框边框,略亮 */
-
-  --accent: #d4a574;         /* 暖琥珀/黄铜 — 唯一强调色 */
-  --accent-bright: #e8bc8a;  /* hover 态 */
-  --accent-dim: #8a6b4a;     /* 暗态 */
-  --accent-surface: rgba(212, 165, 116, 0.08); /* 极淡琥珀底 */
-
-  --moss: #7a9e7e;           /* 青苔绿 — 成功态 */
-  --moss-surface: rgba(122, 158, 126, 0.10);
-  --danger: #c97064;         /* 砖红 — 错误态 */
-  --danger-surface: rgba(201, 112, 100, 0.10);
-  --warning: #c9a96a;       /* 警告,偏暖 */
-
-  /* 兼容旧语义 */
-  --state-success: var(--moss);
-  --state-success-surface: var(--moss-surface);
-  --state-error: var(--danger);
-  --state-error-surface: var(--danger-surface);
+  /* --state-* */
+  --state-success: var(--success);
+  --state-error: var(--destructive);
   --state-warning: var(--warning);
-  --state-warning-surface: rgba(201, 169, 106, 0.12);
+  --state-success-surface: var(--success-surface);
+  --state-error-surface: var(--destructive-surface);
 
-  /* ===== 旧 primitive palette 兼容(部分 JS/内联样式可能引用) ===== */
-  --brand-500: var(--accent);
-  --brand-400: var(--accent-bright);
-  --brand-50: var(--accent-surface);
-  --background-50: var(--bg);
-  --background-100: var(--surface-sunken);
-  --background-200: var(--surface-sunken);
-  --background-300: var(--border);
-  --background-400: var(--border-strong);
-  --background-700: var(--border);
-  --background-800: var(--surface);
-  --background-900: var(--bg);
-  --text-50: var(--fg);
-  --text-400: var(--fg-muted);
-  --text-800: var(--fg);
-  --secondary: var(--surface-sunken);
-  --secondary-foreground: var(--fg);
-  --muted: var(--surface-sunken);
-  --muted-foreground: var(--fg-muted);
-  --card: var(--surface);
-  --card-foreground: var(--fg);
-  --popover: var(--surface-elevated);
-  --popover-foreground: var(--fg);
-  --primary: var(--accent);
-  --primary-foreground: var(--bg);
-  --accent-foreground: var(--bg);
-  --destructive: var(--danger);
-  --destructive-foreground: var(--bg);
-  --border: var(--border);
-  --input: var(--border-strong);
-  --ring: var(--accent);
-  --sidebar: var(--sidebar-bg);
-  --sidebar-foreground: var(--fg-muted);
-  --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: var(--bg);
-  --sidebar-accent: var(--surface-sunken);
-  --sidebar-accent-foreground: var(--fg);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--accent);
-
-  /* ===== TYPOGRAPHY ===== */
-  /* Fraunces: 高对比度可变衬线,带光学尺寸(opsz)和软度(SOFT)轴 */
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Fraunces", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --tracking-tight: -0.02em;
-  --tracking-normal: 0em;
-  --tracking-wide: 0.04em;
-
-  /* ===== RADIUS ===== */
-  --radius-sm: 4px;
-  --radius: 6px;
-  --radius-lg: 10px;
-
-  /* ===== SHADOWS (暗色环境,极克制) ===== */
-  --shadow-2xs: 0 1px 0 0 rgba(0,0,0,0.4);
-  --shadow-xs: 0 1px 2px 0 rgba(0,0,0,0.3);
-  --shadow-sm: 0 2px 8px -2px rgba(0,0,0,0.4), 0 1px 0 0 rgba(255,255,255,0.02);
-  --shadow: 0 4px 16px -4px rgba(0,0,0,0.5);
-  --shadow-md: 0 8px 24px -6px rgba(0,0,0,0.5);
-  --shadow-lg: 0 16px 40px -12px rgba(0,0,0,0.6);
-  --shadow-xl: 0 24px 56px -16px rgba(0,0,0,0.7);
-  --shadow-2xl: 0 32px 72px -20px rgba(0,0,0,0.8);
-
-  /* ===== SPACING ===== */
-  --spacing: 0.25rem;
+  /* legacy surface / fg / accent / status aliases */
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --surface: var(--card);
+  --surface-elevated: var(--popover);
+  --surface-sunken: var(--muted);
+  --sidebar-bg: var(--sidebar);
+  --fg-muted: var(--muted-foreground);
+  --fg-dim: var(--muted-foreground);
+  --border-strong: var(--input);
+  --accent-bright: var(--primary);
+  --accent-dim: var(--muted-foreground);
+  --accent-surface: var(--accent);
+  --moss: var(--success);
+  --moss-surface: var(--success-surface);
+  --danger: var(--destructive);
+  --danger-surface: var(--destructive-surface);
 }
 
-/* ===== Dark theme 是唯一主题(本项目无 light 切换需求) ===== */
+/* ===== Dark theme ===== */
 .dark {
-  /* 所有变量已在 :root 定义为暗色,这里不覆盖 */
   color-scheme: dark;
-}
 
-/* ===== 字体加载(CDN,无 build 依赖) ===== */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  --background: oklch(13.5% 0 0);
+  --foreground: oklch(98% 0 0);
+  --card: oklch(17.5% 0 0);
+  --card-foreground: oklch(98% 0 0);
+  --popover: oklch(17.5% 0 0);
+  --popover-foreground: oklch(98% 0 0);
+  --primary: oklch(93% 0 0);
+  --primary-foreground: oklch(18% 0 0);
+  --secondary: oklch(24% 0 0);
+  --secondary-foreground: oklch(98% 0 0);
+  --muted: oklch(22% 0 0);
+  --muted-foreground: oklch(68% 0 0);
+  --accent: oklch(24% 0 0);
+  --accent-foreground: oklch(98% 0 0);
+  --destructive: oklch(70.4% .191 22.216);
+  --border: oklch(100% 0 0 / 0.1);
+  --ring: oklch(55% 0 0);
+  --sidebar: oklch(17.5% 0 0);
+  --sidebar-foreground: oklch(98% 0 0);
+  --sidebar-primary: oklch(93% 0 0);
+  --sidebar-primary-foreground: oklch(18% 0 0);
+  --sidebar-accent: oklch(24% 0 0);
+  --sidebar-accent-foreground: oklch(98% 0 0);
+  --sidebar-border: oklch(100% 0 0 / 0.1);
+  --sidebar-ring: oklch(55% 0 0);
+  --input: oklch(100% 0 0 / 0.15);
+
+  /* state surfaces slightly more visible on dark */
+  --success-surface: oklch(59.6% .145 163.225 / 0.15);
+  --warning-surface: oklch(66.6% .179 58.318 / 0.15);
+  --destructive-surface: oklch(70.4% .191 22.216 / 0.15);
+}

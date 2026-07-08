@@ -11,8 +11,388 @@
     <link rel="stylesheet" href="/css/dist/app.css">
     <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
     <script src="/js/qrcode.js"></script>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        table th {
+            text-align: left;
+            padding: 10px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        table td {
+            padding: 10px 12px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        table tbody tr:last-child td { border-bottom: none; }
+    </style>
 </head>
 <body class="min-h-screen antialiased">
+
+<!-- ===== Top horizontal navigation ===== -->
+<nav class="top-nav" style="justify-content:space-between">
+  <!-- 左侧:品牌 + 4 个主项 -->
+  <div class="flex items-center gap-1 md:gap-6">
+    <a href="/console.html" class="top-nav-item font-semibold" style="color:var(--foreground);border:0">YT2BILI</a>
+    <div class="top-nav-items" data-open="false">
+      <button class="top-nav-item" data-view-target="bili" data-active="true">B 站</button>
+      <button class="top-nav-item" data-view-target="youtube">YouTube</button>
+      <button class="top-nav-item" data-view-target="general">通用</button>
+      <button class="top-nav-item" data-view-target="status">运行状态</button>
+    </div>
+  </div>
+  <!-- 右侧:Ctrl+K + 主题 + 退出 -->
+  <div class="flex items-center gap-2">
+    <button class="top-nav-item" id="cmdk-trigger" title="命令面板 (Ctrl+K)">
+      <span style="font-family:var(--font-mono);font-size:11px">Ctrl K</span>
+    </button>
+    <button data-dom-id="theme-toggle-btn" class="top-nav-item" aria-label="切换主题">
+      <span id="theme-toggle-icon">◐</span>
+    </button>
+    <button data-dom-id="logout-btn" class="top-nav-item" aria-label="退出登录">退出</button>
+    <button id="mobile-menu-btn" class="md:hidden top-nav-item" aria-label="打开菜单">☰</button>
+  </div>
+</nav>
+
+<!-- 移动端菜单遮罩 -->
+<div id="sidebar-overlay" class="fixed inset-0 z-30 hidden" style="background:rgba(0,0,0,0.6);backdrop-filter:blur(2px)"></div>
+
+<!-- ===== Main content:4 个独立视图容器 ===== -->
+<main class="max-w-6xl mx-auto px-4 md:px-6 py-8">
+
+  <!-- ============================================================ -->
+  <!-- B 站视图                                                      -->
+  <!-- ============================================================ -->
+  <div class="view" data-view="bili" data-active="true">
+    <header class="mb-6">
+      <h1 class="text-2xl font-semibold tracking-tight">B 站配置</h1>
+      <p class="text-sm mt-1" style="color:var(--muted-foreground)">扫码登录、Cookie 管理、检测连接状态</p>
+    </header>
+
+    <section id="section-credentials" class="space-y-6">
+      <!-- 登录状态卡片 -->
+      <div class="surface-card p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-medium">登录状态</h2>
+          <div class="flex items-center gap-2">
+            <button data-dom-id="bili-qrcode-login" class="btn-accent btn-xs">扫码登录 B 站</button>
+            <button data-dom-id="bili-check-btn" class="btn-ghost btn-xs">检测</button>
+            <span data-dom-id="bili-login-status" class="text-xs" style="color:var(--muted-foreground)">未登录</span>
+          </div>
+        </div>
+        <!-- 修改密码 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs mb-1 block" style="color:var(--muted-foreground)">管理密码</label>
+            <span data-dom-id="admin-password-status" class="input-base flex items-center" style="color:var(--muted-foreground)">--</span>
+          </div>
+          <div class="flex items-end">
+            <button data-dom-id="change-password-btn" class="btn-ghost btn-xs">修改密码</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 手动凭证 collapsible -->
+      <div class="surface-card p-5">
+        <button type="button" data-dom-id="bili-manual-toggle" class="collapsible-trigger" data-state="collapsed">
+          <span>显示手动凭证</span>
+        </button>
+        <div data-dom-id="bili-manual-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" style="display:none">
+          <div>
+            <label for="fld-bili-sessdata" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 SESSDATA</label>
+            <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="input-base">
+          </div>
+          <div>
+            <label for="fld-bili-jct" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 bili_jct</label>
+            <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="input-base">
+          </div>
+          <div>
+            <label for="fld-bili-buvid3" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 buvid3</label>
+            <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="input-base">
+          </div>
+          <div>
+            <label for="fld-bili-ac-time-value" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 ac_time_value</label>
+            <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="input-base">
+          </div>
+        </div>
+      </div>
+
+      <!-- 保存按钮 -->
+      <div class="flex justify-end">
+        <button data-dom-id="credentials-save-btn" class="btn-accent" style="padding:0 28px;">保存</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- YouTube 视图                                                  -->
+  <!-- ============================================================ -->
+  <div class="view" data-view="youtube">
+    <header class="mb-6">
+      <h1 class="text-2xl font-semibold tracking-tight">YouTube 配置</h1>
+      <p class="text-sm mt-1" style="color:var(--muted-foreground)">OAuth 登录、API Key、Cookie、频道管理</p>
+    </header>
+
+    <section id="section-channels" class="space-y-6">
+      <!-- OAuth 登录卡片 -->
+      <div class="surface-card p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-medium">YouTube 登录</h2>
+          <div class="flex items-center gap-2">
+            <button data-dom-id="yt-oauth-login" class="btn-accent btn-xs">OAuth 登录 YouTube</button>
+            <button data-dom-id="yt-check-btn" class="btn-ghost btn-xs">检测</button>
+            <span data-dom-id="yt-login-status" class="text-xs" style="color:var(--muted-foreground)">未登录</span>
+          </div>
+        </div>
+        <!-- OAuth 配置 collapsible -->
+        <button type="button" data-dom-id="yt-oauth-config-toggle" class="collapsible-trigger" data-state="collapsed">
+          <span>OAuth 配置</span>
+        </button>
+        <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" style="display:none">
+          <div>
+            <label for="fld-yt-oauth-client-id" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube OAuth Client ID</label>
+            <input id="fld-yt-oauth-client-id" type="text" value="" placeholder="未设置" class="input-base">
+          </div>
+          <div>
+            <label for="fld-yt-oauth-client-secret" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube OAuth Client Secret</label>
+            <input id="fld-yt-oauth-client-secret" type="password" value="" placeholder="未设置" class="input-base">
+          </div>
+          <div class="md:col-span-2">
+            <label for="fld-yt-oauth-redirect-uri" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube OAuth Redirect URI</label>
+            <input id="fld-yt-oauth-redirect-uri" type="text" value="" placeholder="未设置" class="input-base">
+          </div>
+        </div>
+      </div>
+
+      <!-- YouTube API Key / Cookie / GitHub Token + 仓库 -->
+      <div class="surface-card p-5 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="fld-yt-api-key" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube API Key</label>
+            <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="input-base">
+          </div>
+          <div>
+            <label for="fld-github-repo" class="text-xs mb-1 block" style="color:var(--muted-foreground)">GitHub 仓库</label>
+            <input id="fld-github-repo" type="text" value="" placeholder="如 Sweizh/y2b" readonly class="input-base">
+          </div>
+        </div>
+        <div>
+          <label for="fld-yt-cookie" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube Cookie</label>
+          <textarea id="fld-yt-cookie" rows="2" readonly placeholder="未设置" class="input-base" style="height:auto;padding:10px 12px;resize:none;font-size:11px;"></textarea>
+        </div>
+        <div>
+          <label for="fld-github-token" class="text-xs mb-1 block" style="color:var(--muted-foreground)">GitHub Token</label>
+          <div class="flex items-center gap-2">
+            <input id="fld-github-token" type="password" value="" placeholder="未设置" readonly class="input-base">
+            <button class="btn-ghost btn-xs shrink-0">测试</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 频道搜索 + 列表 -->
+      <div class="surface-card p-5">
+        <div class="flex gap-2 mb-4">
+          <input type="text" id="channel-search-input" placeholder="搜索 YouTube 频道..." class="input-base flex-1">
+          <button data-dom-id="channel-search-btn" class="btn-accent shrink-0">搜索频道</button>
+        </div>
+        <div id="channels-list" class="space-y-2">
+          <p class="text-sm" style="color:var(--muted-foreground)">暂无关注的频道</p>
+        </div>
+        <div class="flex justify-end mt-4">
+          <button data-dom-id="channels-save-btn" class="btn-accent">保存频道配置</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 通用视图                                                      -->
+  <!-- ============================================================ -->
+  <div class="view" data-view="general">
+    <header class="mb-6">
+      <h1 class="text-2xl font-semibold tracking-tight">通用配置</h1>
+      <p class="text-sm mt-1" style="color:var(--muted-foreground)">AI 服务、失败通知</p>
+    </header>
+
+    <section id="section-ai-services" class="space-y-6">
+      <!-- AI 服务接口 -->
+      <div class="surface-card p-5 space-y-4">
+        <h2 class="text-base font-medium">AI 服务接口</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="fld-asr-api-url" class="text-xs mb-1 block" style="color:var(--muted-foreground)">语音识别 API 地址</label>
+            <div class="flex items-center gap-2">
+              <input id="fld-asr-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
+            </div>
+          </div>
+          <div>
+            <label for="fld-asr-api-key" class="text-xs mb-1 block" style="color:var(--muted-foreground)">语音识别 API 密钥</label>
+            <div class="flex items-center gap-2">
+              <input id="fld-asr-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
+            </div>
+          </div>
+          <div>
+            <label for="fld-translate-api-url" class="text-xs mb-1 block" style="color:var(--muted-foreground)">翻译 API 地址</label>
+            <div class="flex items-center gap-2">
+              <input id="fld-translate-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
+            </div>
+          </div>
+          <div>
+            <label for="fld-translate-api-key" class="text-xs mb-1 block" style="color:var(--muted-foreground)">翻译 API 密钥</label>
+            <div class="flex items-center gap-2">
+              <input id="fld-translate-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
+              <button class="btn-ghost btn-xs shrink-0">测试</button>
+            </div>
+          </div>
+          <div class="md:col-span-2">
+            <label for="fld-title-template" class="text-xs mb-1 block" style="color:var(--muted-foreground)">标题翻译模板</label>
+            <input id="fld-title-template" type="text" data-field="title_template" value="" placeholder="支持变量: {channel}、{title}" readonly class="input-base" style="font-size:11px;">
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button data-dom-id="ai-save-btn" class="btn-accent">保存</button>
+        </div>
+      </div>
+
+      <!-- 失败通知 -->
+      <div class="surface-card p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-medium">失败通知</h2>
+            <p class="text-xs mt-1" style="color:var(--muted-foreground)">Cookie 失效或流水线连续失败 ≥ 3 次时调用 Webhook 告警</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="notify-enabled" class="sr-only">
+            <div class="switch" data-checked="false"></div>
+          </label>
+        </div>
+        <div class="flex items-center gap-3">
+          <input id="notify-webhook-url" type="text" placeholder="https://qyapi.weixin.com/cgi-bin/webhook/send?key=xxx" class="input-base" style="font-size:11px;" disabled>
+          <button id="notify-save-btn" class="btn-accent btn-xs shrink-0" disabled>保存</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 运行状态视图                                                  -->
+  <!-- ============================================================ -->
+  <div class="view" data-view="status">
+    <header class="mb-6 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight">运行状态</h1>
+        <p class="text-sm mt-1" style="color:var(--muted-foreground)">系统运行情况与处理记录</p>
+      </div>
+      <button data-dom-id="trigger-btn" class="btn-accent">立即执行</button>
+    </header>
+
+    <section id="section-status" class="space-y-6">
+      <!-- 统计卡片 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="surface-card p-5">
+          <div class="text-xs uppercase tracking-wider" style="color:var(--muted-foreground)">上次运行</div>
+          <div class="text-lg font-medium mt-2" id="last-run-time">--</div>
+        </div>
+        <div class="surface-card p-5">
+          <div class="text-xs uppercase tracking-wider" style="color:var(--muted-foreground)">累计处理</div>
+          <div class="text-lg font-medium mt-2">--</div>
+        </div>
+        <div class="surface-card p-5">
+          <div class="text-xs uppercase tracking-wider" style="color:var(--muted-foreground)">系统状态</div>
+          <div class="mt-2">
+            <span class="tag tag-muted">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cookie 状态提示 -->
+      <div data-cookie-hint style="font-size:13px;display:none"></div>
+
+      <!-- Tab 切换 -->
+      <div class="tab-list">
+        <button class="tab-trigger" data-tab-target="records" data-state="active">处理记录</button>
+        <button class="tab-trigger" data-tab-target="processed">已处理</button>
+      </div>
+
+      <!-- 处理记录表格 -->
+      <div class="tab-panel" data-tab-panel="records">
+        <div class="surface-card overflow-x-auto">
+          <table style="min-width:580px">
+            <thead>
+              <tr>
+                <th scope="col">频道</th>
+                <th scope="col">视频标题</th>
+                <th scope="col">状态</th>
+                <th scope="col">时间</th>
+                <th scope="col">失败原因</th>
+              </tr>
+            </thead>
+            <tbody id="status-records-tbody">
+              <tr><td colspan="5" style="text-align:center;color:var(--muted-foreground);font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 已处理表格 -->
+      <div class="tab-panel" data-tab-panel="processed" style="display:none">
+        <div class="surface-card overflow-x-auto">
+          <table style="min-width:680px">
+            <thead>
+              <tr>
+                <th scope="col">B 站标题</th>
+                <th scope="col">BV 号</th>
+                <th scope="col">频道</th>
+                <th scope="col">状态</th>
+                <th scope="col">处理时间</th>
+                <th scope="col" style="text-align:right;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="processed-tbody">
+              <tr><td colspan="6" style="text-align:center;color:var(--muted-foreground);font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;">加载中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 手动添加队列(原手动添加区) -->
+      <section id="section-manual" class="surface-card p-5 space-y-4">
+        <h2 class="text-base font-medium">手动添加视频</h2>
+        <div class="flex gap-2 flex-wrap">
+          <select data-dom-id="manual-channel-select" class="input-base shrink-0" style="width:auto">
+            <option value="">不指定频道</option>
+          </select>
+          <select data-dom-id="manual-season-select" class="input-base shrink-0" style="width:auto">
+            <option value="">不指定合集</option>
+          </select>
+          <input type="text" id="manual-video-input" placeholder="YouTube 视频 ID 或 URL" class="input-base flex-1">
+          <button data-dom-id="manual-add-btn" class="btn-accent shrink-0">添加到队列</button>
+        </div>
+        <div id="manual-queue-list" class="space-y-2"></div>
+      </section>
+    </section>
+  </div>
+
+</main>
+
+<!-- ===== Command Palette (默认隐藏) ===== -->
+<div class="command-palette" id="command-palette" style="display:none">
+  <div class="command-palette-body">
+    <input type="text" class="command-palette-input" id="cmdk-input" placeholder="输入命令或搜索..." autocomplete="off">
+    <div class="command-palette-list" id="cmdk-list">
+      <!-- JS 动态填充 -->
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/js/dist/console.js"></script>
 
 <!-- OAuth 回调处理:检测 URL hash 并通过 postMessage 通知 opener 后关闭窗口 -->
 <script>
@@ -60,406 +440,5 @@
   })();
 </script>
 
-<!-- ===== DASHBOARD LAYOUT: Sidebar + Main Content ===== -->
-<div class="flex min-h-screen">
-
-  <!-- Mobile hamburger overlay -->
-  <div id="sidebar-overlay" class="fixed inset-0 z-30 hidden" style="background:rgba(0,0,0,0.6);backdrop-filter:blur(2px)"></div>
-
-  <!-- Left Sidebar — 印刷油墨色,垂直品牌字 -->
-  <aside class="fixed top-0 left-0 z-40 h-full flex flex-col" style="width:220px;background:var(--sidebar-bg);border-right:1px solid var(--border)">
-    <!-- Brand:大号衬线 + 垂直 mono 标签 -->
-    <div class="px-6 pt-7 pb-6" style="border-bottom:1px solid var(--border)">
-      <a href="#section-credentials" class="block">
-        <div class="eyebrow mb-2" style="font-size:9px;">Console</div>
-        <span class="display-title" style="font-size:22px;">YT<em>2</em>BILI</span>
-      </a>
-    </div>
-
-    <!-- Nav Items — terminal-style mono 编号 -->
-    <nav class="flex-1 flex flex-col gap-0.5 px-3 py-4" aria-label="Dashboard navigation">
-      <a href="#section-credentials" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--accent);background:var(--accent-surface)">
-        <span class="section-num">01</span>
-        <span style="font-size:13px;font-weight:500;">账号凭证</span>
-      </a>
-      <a href="#section-ai-services" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
-        <span class="section-num">02</span>
-        <span style="font-size:13px;">AI 服务</span>
-      </a>
-      <a href="#section-channels" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
-        <span class="section-num">03</span>
-        <span style="font-size:13px;">频道管理</span>
-      </a>
-      <a href="#section-status" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
-        <span class="section-num">04</span>
-        <span style="font-size:13px;">运行状态</span>
-      </a>
-      <a href="#section-manual" class="group flex items-center gap-3 px-3 py-2.5 transition-colors duration-150" style="color:var(--fg-muted)">
-        <span class="section-num">05</span>
-        <span style="font-size:13px;">手动添加</span>
-      </a>
-    </nav>
-
-    <!-- Logout & Theme — 底部 -->
-    <div class="px-3 pb-5 pt-4" style="border-top:1px solid var(--border)">
-      <button data-dom-id="theme-toggle-btn" class="flex items-center gap-3 px-3 py-2.5 w-full transition-colors duration-150 mb-1" style="color:var(--fg-muted);background:transparent;border:none;cursor:pointer;font-family:var(--font-sans);font-size:13px;">
-        <span id="theme-toggle-icon" style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:14px">◐</span>
-        <span>切换主题</span>
-      </button>
-      <button data-dom-id="logout-btn" class="flex items-center gap-3 px-3 py-2.5 w-full transition-colors duration-150" style="color:var(--fg-muted);background:transparent;border:none;cursor:pointer;font-family:var(--font-sans);font-size:13px;">
-        <span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:14px;">←</span>
-        <span>退出登录</span>
-      </button>
-    </div>
-  </aside>
-
-  <!-- Mobile hamburger button -->
-  <button id="mobile-menu-btn" class="fixed top-4 left-4 z-50 hidden p-2" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)" aria-label="打开菜单">
-    <span style="display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;font-family:var(--font-mono);color:var(--fg)">≡</span>
-  </button>
-
-  <!-- Main Content Area -->
-  <main class="flex-1 min-h-screen" style="margin-left:220px;background:var(--bg)">
-    <div class="mx-auto px-8 py-12" style="max-width:980px;">
-
-      <!-- Mobile-only spacer -->
-      <div class="lg:hidden" style="height:48px"></div>
-
-      <!-- ============================================================ -->
-      <!-- Section 01: 账号凭证                                          -->
-      <!-- ============================================================ -->
-      <section id="section-credentials" class="editorial-section reveal">
-        <div class="mb-8">
-          <div class="flex items-baseline gap-3 mb-3">
-            <span class="section-num">01</span>
-            <span class="eyebrow">Credentials</span>
-          </div>
-          <h2 class="display-title" style="font-size:32px;">账号<em>凭证</em></h2>
-          <p class="body-muted mt-2" style="max-width:560px;">管理 B 站、YouTube、GitHub 的 API 密钥与认证令牌。敏感信息已脱敏显示。</p>
-        </div>
-
-        <!-- 顶部操作行:修改密码 + 扫码登录 B 站 -->
-        <div class="flex flex-wrap items-center gap-3 mb-8 pb-6" style="border-bottom:1px solid var(--border)">
-          <button data-dom-id="change-password-btn" class="btn-ghost btn-xs">修改密码</button>
-          <div class="flex items-center gap-2">
-            <button data-dom-id="bili-qrcode-login" class="btn-accent btn-xs">扫码登录 B 站</button>
-            <button data-dom-id="bili-check-btn" class="btn-ghost btn-xs">检测</button>
-            <span data-dom-id="bili-login-status" style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.04em;">未登录</span>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-
-          <!-- 管理密码 -->
-          <div class="flex flex-col gap-2">
-            <label class="section-num">管理密码</label>
-            <span data-dom-id="admin-password-status" class="input-base flex items-center" style="color:var(--fg-muted)">--</span>
-          </div>
-
-          <!-- B站手动凭证折叠 -->
-          <div class="md:col-span-2">
-            <button type="button" data-dom-id="bili-manual-toggle" class="btn-link">显示手动凭证 ▾</button>
-          </div>
-          <div data-dom-id="bili-manual-wrap" class="contents grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5" style="display:none">
-            <div class="flex flex-col gap-2">
-              <label for="fld-bili-sessdata" class="section-num">B站 SESSDATA</label>
-              <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="input-base">
-            </div>
-            <div class="flex flex-col gap-2">
-              <label for="fld-bili-jct" class="section-num">B站 bili_jct</label>
-              <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="input-base">
-            </div>
-            <div class="flex flex-col gap-2">
-              <label for="fld-bili-buvid3" class="section-num">B站 buvid3</label>
-              <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="input-base">
-            </div>
-            <div class="flex flex-col gap-2">
-              <label for="fld-bili-ac-time-value" class="section-num">B站 ac_time_value</label>
-              <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="input-base">
-            </div>
-          </div>
-
-          <!-- OAuth 登录 YouTube + 配置 -->
-          <div class="flex flex-col gap-3 md:col-span-2 mt-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <button data-dom-id="yt-oauth-login" class="btn-accent btn-xs">OAuth 登录 YouTube</button>
-              <button data-dom-id="yt-check-btn" class="btn-ghost btn-xs">检测</button>
-              <span data-dom-id="yt-login-status" style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.04em;">未登录</span>
-              <button type="button" data-dom-id="yt-oauth-config-toggle" class="btn-link ml-auto">OAuth 配置 ▾</button>
-            </div>
-            <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5 mt-1" style="display:none">
-              <div class="flex flex-col gap-2">
-                <label for="fld-yt-oauth-client-id" class="section-num">YouTube OAuth Client ID</label>
-                <input id="fld-yt-oauth-client-id" type="text" value="" placeholder="未设置" class="input-base">
-              </div>
-              <div class="flex flex-col gap-2">
-                <label for="fld-yt-oauth-client-secret" class="section-num">YouTube OAuth Client Secret</label>
-                <input id="fld-yt-oauth-client-secret" type="password" value="" placeholder="未设置" class="input-base">
-              </div>
-              <div class="flex flex-col gap-2 md:col-span-2">
-                <label for="fld-yt-oauth-redirect-uri" class="section-num">YouTube OAuth Redirect URI</label>
-                <input id="fld-yt-oauth-redirect-uri" type="text" value="" placeholder="未设置" class="input-base">
-              </div>
-            </div>
-          </div>
-
-          <!-- YouTube API Key -->
-          <div class="flex flex-col gap-2">
-            <label for="fld-yt-api-key" class="section-num">YouTube API Key</label>
-            <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="input-base">
-          </div>
-
-          <!-- YouTube Cookie -->
-          <div class="flex flex-col gap-2 md:col-span-2">
-            <label for="fld-yt-cookie" class="section-num">YouTube Cookie</label>
-            <textarea id="fld-yt-cookie" rows="2" readonly placeholder="未设置" class="input-base" style="height:auto;padding:10px 12px;resize:none;font-size:11px;"></textarea>
-          </div>
-
-          <!-- GitHub Token -->
-          <div class="flex flex-col gap-2">
-            <label for="fld-github-token" class="section-num">GitHub Token</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-github-token" type="password" value="" placeholder="未设置" readonly class="input-base">
-              <button class="btn-ghost btn-xs shrink-0">测试</button>
-            </div>
-          </div>
-
-          <!-- GitHub 仓库 -->
-          <div class="flex flex-col gap-2">
-            <label for="fld-github-repo" class="section-num">GitHub 仓库</label>
-            <input id="fld-github-repo" type="text" value="" placeholder="如 Sweizh/y2b" readonly class="input-base">
-          </div>
-        </div>
-
-        <!-- Save -->
-        <div class="flex justify-end mt-8">
-          <button data-dom-id="credentials-save-btn" class="btn-accent" style="padding:0 28px;">保存</button>
-        </div>
-      </section>
-
-      <!-- ============================================================ -->
-      <!-- Section 02: AI 服务接口                                       -->
-      <!-- ============================================================ -->
-      <section id="section-ai-services" class="editorial-section reveal reveal-1">
-        <div class="mb-8">
-          <div class="flex items-baseline gap-3 mb-3">
-            <span class="section-num">02</span>
-            <span class="eyebrow">AI Services</span>
-          </div>
-          <h2 class="display-title" style="font-size:32px;">AI 服务<em>接口</em></h2>
-          <p class="body-muted mt-2" style="max-width:560px;">配置语音识别与翻译的 API 端点及密钥。</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-          <div class="flex flex-col gap-2">
-            <label for="fld-asr-api-url" class="section-num">语音识别 API 地址</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-asr-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
-              <button class="btn-ghost btn-xs shrink-0">测试</button>
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label for="fld-asr-api-key" class="section-num">语音识别 API 密钥</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-asr-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
-              <button class="btn-ghost btn-xs shrink-0">测试</button>
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label for="fld-translate-api-url" class="section-num">翻译 API 地址</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-translate-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
-              <button class="btn-ghost btn-xs shrink-0">测试</button>
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label for="fld-translate-api-key" class="section-num">翻译 API 密钥</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-translate-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
-              <button class="btn-ghost btn-xs shrink-0">测试</button>
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label for="fld-title-template" class="section-num">标题翻译模板</label>
-            <input id="fld-title-template" type="text" data-field="title_template" value="" placeholder="支持变量: {channel}、{title}" readonly class="input-base" style="font-size:11px;">
-          </div>
-        </div>
-
-        <div class="flex justify-end mt-8">
-          <button data-dom-id="ai-save-btn" class="btn-accent" style="padding:0 28px;">保存</button>
-        </div>
-      </section>
-
-      <!-- ============================================================ -->
-      <!-- Section 03: 频道管理                                          -->
-      <!-- ============================================================ -->
-      <section id="section-channels" class="editorial-section reveal reveal-2">
-        <div class="mb-8">
-          <div class="flex items-baseline gap-3 mb-3">
-            <span class="section-num">03</span>
-            <span class="eyebrow">Channels</span>
-          </div>
-          <h2 class="display-title" style="font-size:32px;">频道<em>管理</em></h2>
-          <p class="body-muted mt-2" style="max-width:560px;">搜索并关注 YouTube 频道,配置自动投稿到 B 站的参数。</p>
-        </div>
-
-        <div class="flex items-center gap-3 mb-6">
-          <input type="text" placeholder="输入 YouTube 频道名称或 ID" class="input-base" style="height:44px;">
-          <button data-dom-id="channel-search-btn" class="btn-accent shrink-0" style="height:44px;padding:0 24px;">搜索频道</button>
-        </div>
-
-        <div id="channels-list" class="mb-6">
-          <div class="surface-card px-4 py-10 text-center">
-            <p style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.08em;">加载中…</p>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between pt-2">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.04em;">通过上方搜索框添加新频道</span>
-          <button data-dom-id="channels-save-btn" class="btn-accent" style="padding:0 28px;">保存频道配置</button>
-        </div>
-      </section>
-
-      <!-- ============================================================ -->
-      <!-- Section 04: 运行状态                                         -->
-      <!-- ============================================================ -->
-      <section id="section-status" class="editorial-section reveal reveal-3">
-        <div class="mb-8">
-          <div class="flex items-baseline gap-3 mb-3">
-            <span class="section-num">04</span>
-            <span class="eyebrow">Status</span>
-          </div>
-          <h2 class="display-title" style="font-size:32px;">运行<em>状态</em></h2>
-          <p class="body-muted mt-2" style="max-width:560px;">查看系统运行情况与处理记录。</p>
-        </div>
-
-        <!-- Stats:三栏 mono 数字 -->
-        <div class="grid grid-cols-3 gap-4 mb-6">
-          <div class="surface-card px-5 py-4">
-            <p class="section-num mb-2">上次运行</p>
-            <p style="font-family:var(--font-mono);font-size:14px;font-weight:500;color:var(--fg);white-space:nowrap;">--</p>
-          </div>
-          <div class="surface-card px-5 py-4">
-            <p class="section-num mb-2">累计处理</p>
-            <p style="font-family:var(--font-mono);font-size:14px;font-weight:500;color:var(--fg);white-space:nowrap;">--</p>
-          </div>
-          <div class="surface-card px-5 py-4">
-            <p class="section-num mb-2">系统状态</p>
-            <div class="mt-1">
-              <span class="tag tag-muted">--</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Cookie 状态提示 -->
-        <div data-cookie-hint class="mb-6" style="font-size:13px;display:none"></div>
-
-        <!-- Execute -->
-        <div class="mb-6">
-          <button data-dom-id="trigger-btn" class="btn-accent" style="padding:0 28px;">立即执行</button>
-        </div>
-
-        <!-- 处理记录表格 -->
-        <div class="overflow-x-auto surface-card mb-8">
-          <table class="table-editorial" style="min-width:580px">
-            <thead>
-              <tr>
-                <th scope="col">频道</th>
-                <th scope="col">视频标题</th>
-                <th scope="col">状态</th>
-                <th scope="col">时间</th>
-                <th scope="col">失败原因</th>
-              </tr>
-            </thead>
-            <tbody id="status-records-tbody">
-              <tr><td colspan="5" style="text-align:center;color:var(--fg-dim);font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;">加载中…</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 已处理视频列表 -->
-        <div class="mt-8">
-          <div class="flex items-baseline justify-between mb-4">
-            <h3 class="display-title" style="font-size:18px;">已处理<em>视频</em></h3>
-            <p style="font-family:var(--font-mono);font-size:10px;color:var(--fg-dim);letter-spacing:0.08em;">DELETE → 可重新处理</p>
-          </div>
-          <div class="overflow-x-auto surface-card">
-            <table class="table-editorial" style="min-width:680px">
-              <thead>
-                <tr>
-                  <th scope="col">B 站标题</th>
-                  <th scope="col">BV 号</th>
-                  <th scope="col">频道</th>
-                  <th scope="col">状态</th>
-                  <th scope="col">处理时间</th>
-                  <th scope="col" style="text-align:right;">操作</th>
-                </tr>
-              </thead>
-              <tbody id="processed-tbody">
-                <tr><td colspan="6" style="text-align:center;color:var(--fg-dim);font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;">加载中…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- 失败通知配置 -->
-        <div class="mt-8 surface-card p-5">
-          <div class="flex items-center justify-between mb-4">
-            <div>
-              <h3 class="display-title" style="font-size:16px;">失败<em>通知</em></h3>
-              <p class="body-muted mt-1" style="font-size:12px;">Cookie 失效或流水线连续失败 ≥ 3 次时调用 Webhook 告警</p>
-            </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="notify-enabled" class="sr-only">
-              <div class="relative" style="width:40px;height:20px;border-radius:10px;background:var(--surface-sunken);border:1px solid var(--border);transition:background 0.15s;">
-                <div style="position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--fg-muted);transition:all 0.2s;"></div>
-              </div>
-            </label>
-          </div>
-          <div class="flex items-center gap-3">
-            <input id="notify-webhook-url" type="text" placeholder="https://qyapi.weixin.com/cgi-bin/webhook/send?key=xxx" class="input-base" style="font-size:11px;" disabled>
-            <button id="notify-save-btn" class="btn-accent btn-xs shrink-0" disabled>保存</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============================================================ -->
-      <!-- Section 05: 手动添加视频                                      -->
-      <!-- ============================================================ -->
-      <section id="section-manual" class="editorial-section reveal reveal-4">
-        <div class="mb-8">
-          <div class="flex items-baseline gap-3 mb-3">
-            <span class="section-num">05</span>
-            <span class="eyebrow">Manual Queue</span>
-          </div>
-          <h2 class="display-title" style="font-size:32px;">手动<em>添加</em></h2>
-          <p class="body-muted mt-2" style="max-width:560px;">手动添加 YouTube 视频到处理队列。</p>
-        </div>
-
-        <div class="flex flex-col gap-3 mb-6">
-          <textarea rows="3" placeholder="输入 YouTube 视频 URL,每行一个&#10;支持完整 URL、短链接、纯视频 ID" class="input-base" style="height:auto;padding:12px;resize:none;font-size:12px;"></textarea>
-          <div class="flex items-center gap-3 flex-wrap">
-            <select data-dom-id="manual-channel-select" class="input-base shrink-0" style="width:auto;height:44px;">
-              <option value="">不指定频道</option>
-            </select>
-            <select data-dom-id="manual-season-select" class="input-base shrink-0" style="width:auto;height:44px;">
-              <option value="">不指定合集</option>
-            </select>
-            <button data-dom-id="manual-add-btn" class="btn-accent shrink-0" style="height:44px;padding:0 24px;">添加到队列</button>
-          </div>
-        </div>
-
-        <div id="manual-queue-list" class="flex flex-col gap-2">
-          <div class="surface-card px-4 py-8 text-center">
-            <p style="font-family:var(--font-mono);font-size:11px;color:var(--fg-dim);letter-spacing:0.08em;">加载中…</p>
-          </div>
-        </div>
-      </section>
-
-    </div>
-  </main>
-</div>
-
-<script type="module" src="/js/dist/console.js"></script>
 </body>
 </html>
