@@ -33,7 +33,9 @@ export function initChannels() {
   var channelsSection = document.getElementById('section-channels');
   if (!channelsSection) return;
 
-  var searchInput = channelsSection.querySelector('input[type="text"]');
+  // Note: must target #channel-search-input by id — the first input[type="text"]
+  // inside #section-channels is the OAuth Client ID field, not the search box.
+  var searchInput = document.getElementById('channel-search-input');
   var searchBtn = channelsSection.querySelector('[data-dom-id="channel-search-btn"]');
 
   // Cache of followed channel_ids, used to mark search results as "已关注".
@@ -216,29 +218,63 @@ export function initChannels() {
       if (!followBtn) return;
 
       followBtn.addEventListener('click', function () {
-        setBtnLoading(followBtn, true, '添加中…');
-        apiPost('/api/channels', { channel_id: channelId, name: name })
-          .then(function (d) {
-            setBtnLoading(followBtn, false);
-            if (d.error) {
-              showToast(d.error, 'error');
-            } else {
-              followBtn.textContent = '已关注';
-              followBtn.style.background = 'var(--apple-secondary)';
-              followBtn.style.color = 'var(--apple-muted-foreground)';
-              followBtn.disabled = true;
-              followBtn.style.cursor = 'not-allowed';
-              followBtn.style.opacity = '0.7';
-              followBtn.classList.remove('follow-btn');
-              followedChannelIds[channelId] = true;
-              showToast('已关注 ' + name, 'success');
-              loadChannels();
-            }
-          })
-          .catch(function (e) {
-            setBtnLoading(followBtn, false);
-            showToast('关注失败：' + (e.message || e), 'error');
+        // 先加载 seasons(ensureSeasons 已有缓存机制)
+        ensureSeasons(function (seasons) {
+          // 构建 modal 内容
+          var seasonOpts = '<option value="">不指定合集</option>';
+          seasons.forEach(function (s) {
+            var sid = String(s.id || s.season_id || '');
+            var sname = s.name || s.title || s.season_title || ('合集 ' + sid);
+            seasonOpts += '<option value="' + escapeHtml(sid) + '">' + escapeHtml(sname) + '</option>';
           });
+          var smOpts = '<option value="translated">翻译字幕</option>' +
+                       '<option value="original">原语言字幕</option>' +
+                       '<option value="both">双语字幕</option>' +
+                       '<option value="none">不上传字幕</option>';
+          showModal({
+            title: '关注频道: ' + name,
+            bodyHtml:
+              '<div style="margin-bottom:12px">' +
+              '<label style="display:block;font-size:12px;margin-bottom:4px;color:var(--muted-foreground)">B 站合集(可选)</label>' +
+              '<select id="follow-season-select" style="width:100%;height:36px;padding:0 8px;border-radius:6px;background:var(--card);border:1px solid var(--input);color:var(--foreground)">' + seasonOpts + '</select>' +
+              '</div>' +
+              '<div>' +
+              '<label style="display:block;font-size:12px;margin-bottom:4px;color:var(--muted-foreground)">字幕模式</label>' +
+              '<select id="follow-subtitle-mode" style="width:100%;height:36px;padding:0 8px;border-radius:6px;background:var(--card);border:1px solid var(--input);color:var(--foreground)">' + smOpts + '</select>' +
+              '</div>',
+            okText: '关注',
+            onOk: function () {
+              var seasonSel = document.getElementById('follow-season-select');
+              var smSel = document.getElementById('follow-subtitle-mode');
+              var payload = { channel_id: channelId, name: name };
+              if (seasonSel && seasonSel.value) payload.season_id = seasonSel.value;
+              if (smSel && smSel.value) payload.subtitle_mode = smSel.value;
+              setBtnLoading(followBtn, true, '添加中…');
+              apiPost('/api/channels', payload)
+                .then(function (d) {
+                  setBtnLoading(followBtn, false);
+                  if (d.error) {
+                    showToast(d.error, 'error');
+                  } else {
+                    followBtn.textContent = '已关注';
+                    followBtn.style.background = 'var(--secondary)';
+                    followBtn.style.color = 'var(--muted-foreground)';
+                    followBtn.disabled = true;
+                    followBtn.style.cursor = 'not-allowed';
+                    followBtn.style.opacity = '0.7';
+                    followBtn.classList.remove('follow-btn');
+                    followedChannelIds[channelId] = true;
+                    showToast('已关注 ' + name, 'success');
+                    loadChannels();
+                  }
+                })
+                .catch(function (e) {
+                  setBtnLoading(followBtn, false);
+                  showToast('关注失败：' + (e.message || e), 'error');
+                });
+            }
+          });
+        });
       });
     });
 
@@ -657,4 +693,14 @@ export function initChannels() {
       });
     });
   }
+
+  // B 站登录成功后,清除合集缓存并重新加载频道列表(让合集下拉刷新)
+  document.addEventListener('bili-login-success', function () {
+    cachedSeasons = null;     // 清缓存,强制下次 ensureSeasons 重新拉取
+    seasonsLoading = false;
+    loadChannels();           // 重新渲染频道卡片(会触发 ensureSeasons)
+  });
+
+  // 主动预加载合集缓存(B 站已登录时立即可用,供关注弹窗/频道卡片使用)
+  ensureSeasons(function () {});
 }

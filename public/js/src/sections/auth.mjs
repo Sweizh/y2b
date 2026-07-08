@@ -198,6 +198,8 @@ export function openBiliQrcodeLogin() {
                 showToast('登录成功,账号: ' + (st.uname || '(未知)'), 'success');
                 // 刷新表单字段(B站 4 字段填充脱敏值)
                 refreshConfigDisplay();
+                // 分发登录成功事件,通知 channels.mjs / manual.mjs 刷新登录态相关 UI
+                document.dispatchEvent(new CustomEvent('bili-login-success'));
                 // 自动调 /api/seasons 缓存合集列表(获取后丢弃,触发后端缓存)
                 apiFetch('/api/seasons').then(function () { /* discard */ }).catch(function () {});
                 // 调 /api/test/bili 验证凭证
@@ -520,19 +522,14 @@ export function initAuth() {
   var changePwdBtn = document.querySelector('[data-dom-id="change-password-btn"]');
   if (changePwdBtn) changePwdBtn.addEventListener('click', openChangePasswordModal);
 
-  // OAuth 配置展开/收起
+  // OAuth 配置展开/收起(CSS ::before 提供 ▸ 箭头,[data-state] 驱动旋转)
   var ytOAuthToggle = document.querySelector('[data-dom-id="yt-oauth-config-toggle"]');
   var ytOAuthWrap = document.querySelector('[data-dom-id="yt-oauth-config-wrap"]');
   if (ytOAuthToggle && ytOAuthWrap) {
     ytOAuthToggle.addEventListener('click', function () {
-      var isOpen = ytOAuthWrap.style.display !== 'none';
-      if (isOpen) {
-        ytOAuthWrap.style.display = 'none';
-        ytOAuthToggle.textContent = 'OAuth 配置 ▾';
-      } else {
-        ytOAuthWrap.style.display = '';
-        ytOAuthToggle.textContent = 'OAuth 配置 ▴';
-      }
+      var expanded = ytOAuthWrap.style.display !== 'none';
+      ytOAuthWrap.style.display = expanded ? 'none' : '';
+      ytOAuthToggle.setAttribute('data-state', expanded ? 'collapsed' : 'expanded');
     });
   }
 
@@ -541,14 +538,9 @@ export function initAuth() {
   var biliManualWrap = document.querySelector('[data-dom-id="bili-manual-wrap"]');
   if (biliManualToggle && biliManualWrap) {
     biliManualToggle.addEventListener('click', function () {
-      var isOpen = biliManualWrap.style.display !== 'none';
-      if (isOpen) {
-        biliManualWrap.style.display = 'none';
-        biliManualToggle.textContent = '显示手动凭证 ▾';
-      } else {
-        biliManualWrap.style.display = '';
-        biliManualToggle.textContent = '隐藏手动凭证 ▴';
-      }
+      var expanded = biliManualWrap.style.display !== 'none';
+      biliManualWrap.style.display = expanded ? 'none' : '';
+      biliManualToggle.setAttribute('data-state', expanded ? 'collapsed' : 'expanded');
     });
   }
 }

@@ -5,7 +5,11 @@
 //   showModal(opts) → returns { close }
 //
 // opts:
-//   { title, body, okText, cancelText, onOk, onHelpBody }
+//   { title, body, bodyHtml, okText, cancelText, onOk, onHelpBody }
+//
+// bodyHtml: when provided, the confirm body is rendered as a <div> with
+//   innerHTML (so form controls / selects can be embedded). Otherwise `body`
+//   (plain text) is rendered in a <p> via textContent.
 //
 // - When `onHelpBody` (HTML string) is provided: renders a wider help dialog
 //   (max-width:560px, max-height:80vh, overflow-y:auto) with a close (×) button in
@@ -122,10 +126,14 @@ export function showModal(opts) {
     title.style.cssText = 'font-size:16px;font-weight:600;margin:0 0 12px';
     title.textContent = opts.title || '确认';
 
-    const body = document.createElement('p');
+    const body = document.createElement(opts.bodyHtml != null ? 'div' : 'p');
     body.style.cssText =
       'font-size:14px;margin:0 0 20px;color:var(--apple-muted-foreground)';
-    body.textContent = opts.body || '';
+    if (opts.bodyHtml != null) {
+      body.innerHTML = opts.bodyHtml;
+    } else {
+      body.textContent = opts.body || '';
+    }
 
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px';
@@ -211,8 +219,10 @@ export function showModal(opts) {
   if (cancelBtn) cancelBtn.addEventListener('click', close);
   if (okBtn) {
     okBtn.addEventListener('click', function () {
-      close();
+      // Run onOk BEFORE close so callbacks can still read form fields rendered
+      // via bodyHtml (the dialog is removed from the DOM on close).
       if (typeof opts.onOk === 'function') opts.onOk();
+      close();
     });
   }
 

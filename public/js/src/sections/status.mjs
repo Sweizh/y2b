@@ -16,7 +16,7 @@
 //   #section-status, [data-dom-id="trigger-btn"], .grid.grid-cols-3 > div,
 //   [data-cookie-hint], #status-records-tbody, #processed-tbody,
 //   #notify-enabled, #notify-webhook-url, #notify-save-btn,
-//   notifySwitch.parentElement.querySelector('div.relative'),
+//   notifySwitch.parentElement.querySelector('.switch'),
 //   .processed-del-btn[data-video-id]
 //
 // Deviation note:
@@ -242,14 +242,13 @@ export function initStatus() {
   const notifySwitch = document.getElementById('notify-enabled');
   const notifyUrlInput = document.getElementById('notify-webhook-url');
   const notifySaveBtn = document.getElementById('notify-save-btn');
-  const notifySwitchWrap = notifySwitch ? notifySwitch.parentElement.querySelector('div.relative') : null;
+  // .switch div 是视觉开关,CSS 靠 [data-checked] 驱动 ::after 滑块位移与背景色
+  const notifySwitchWrap = notifySwitch ? notifySwitch.parentElement.querySelector('.switch') : null;
 
   function setNotifySwitchUI(on) {
     if (!notifySwitchWrap) return;
-    const knob = notifySwitchWrap.querySelector('div.absolute');
-    notifySwitchWrap.style.background = on ? 'var(--brand-500)' : 'var(--background-400)';
-    knob.classList.remove('left-0.5', 'right-0.5');
-    knob.classList.add(on ? 'right-0.5' : 'left-0.5');
+    notifySwitchWrap.setAttribute('data-checked', on ? 'true' : 'false');
+    notifySwitch.checked = on;
     if (notifyUrlInput) notifyUrlInput.disabled = !on;
     if (notifySaveBtn) notifySaveBtn.disabled = !on;
   }
@@ -258,14 +257,13 @@ export function initStatus() {
     notifySwitch.addEventListener('change', function () {
       setNotifySwitchUI(notifySwitch.checked);
     });
-    // 整个开关 wrap 可点
-    if (notifySwitchWrap) {
-      notifySwitchWrap.addEventListener('click', function (e) {
-        e.preventDefault();
-        notifySwitch.checked = !notifySwitch.checked;
-        setNotifySwitchUI(notifySwitch.checked);
-      });
-    }
+  }
+  // 整个开关 wrap 可点(阻止 label 默认转发 click 到 checkbox,避免双触发)
+  if (notifySwitchWrap) {
+    notifySwitchWrap.addEventListener('click', function (e) {
+      e.preventDefault();
+      setNotifySwitchUI(!notifySwitch.checked);
+    });
   }
 
   // 保存按钮

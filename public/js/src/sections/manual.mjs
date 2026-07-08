@@ -179,4 +179,9 @@ export function initManual() {
       .catch(function (e) { console.warn('[loadManualQueue]', e); });
   }
   loadManualQueue();
+
+  // B 站登录成功后,重新加载合集选项
+  document.addEventListener('bili-login-success', function () {
+    loadManualSeasonOptions();
+  });
 }

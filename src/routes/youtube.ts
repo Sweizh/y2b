@@ -3,6 +3,7 @@
 
 import { Hono } from 'hono';
 import { getRawConfig } from '../kv';
+import { refreshYouTubeAccessToken } from './youtube_oauth';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -16,7 +17,7 @@ app.get('/search', async (c) => {
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
 
   // 选择鉴权方式:OAuth 优先,API Key 降级
-  // OAuth 模式:检查 token 是否过期,过期则返回提示
+  // OAuth 模式:检查 token 是否过期,过期则尝试用 refresh_token 静默刷新
   let useOAuth = false;
   let accessToken = '';
   if (cfg.yt_access_token && cfg.yt_refresh_token) {
@@ -26,8 +27,16 @@ app.get('/search', async (c) => {
       useOAuth = true;
       accessToken = cfg.yt_access_token;
     } else {
-      // 过期但已配置 OAuth,提示用户刷新(或由 Runner 调 /api/pipeline/yt-oauth-refresh,见 CODE-10)
-      return c.json({ error: 'YouTube OAuth token 已过期,请重新登录或联系 Runner 刷新' }, 401);
+      // 过期但已配置 OAuth,尝试用 refresh_token 静默刷新(避免用户先点"检测")
+      const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+      const r = await refreshYouTubeAccessToken(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '', requestId);
+      if (r.ok && r.access_token) {
+        useOAuth = true;
+        accessToken = r.access_token;
+      } else {
+        // 刷新失败(refresh_token 失效或网络异常),返回友好错误
+        return c.json({ error: 'YouTube 登录已过期,请重新 OAuth 登录' }, 401);
+      }
     }
   }
   if (!useOAuth && !cfg.yt_api_key) {
