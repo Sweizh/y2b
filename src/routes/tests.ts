@@ -32,6 +32,8 @@ app.post('/asr', async (c) => {
     const endpoint = buildChatCompletionsUrl(cfg.asr_api);
     const resp = await fetch(endpoint, {
       method: 'POST',
+      // manual:避免某些 API 网关返回 30x 到自身导致 Worker fetch 死循环
+      redirect: 'manual',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${cfg.asr_key}`,
@@ -42,6 +44,13 @@ app.post('/asr', async (c) => {
         max_tokens: 8,
       }),
     });
+    // opaqueredirect:服务端返回了重定向,manual 模式下无法读 body
+    if (resp.type === 'opaqueredirect' || resp.status === 0) {
+      return c.json({
+        success: false,
+        message: `ASR 端点返回重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
+      });
+    }
     if (!resp.ok) {
       const text = await resp.text();
       return c.json({ success: false, message: `ASR API 返回 ${resp.status}：${text.slice(0, 200)}` });
@@ -68,6 +77,8 @@ app.post('/translate', async (c) => {
     const endpoint = buildChatCompletionsUrl(cfg.translate_api);
     const resp = await fetch(endpoint, {
       method: 'POST',
+      // manual:避免某些 API 网关返回 30x 到自身导致 Worker fetch 死循环
+      redirect: 'manual',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${cfg.translate_key}`,
@@ -78,6 +89,13 @@ app.post('/translate', async (c) => {
         max_tokens: 16,
       }),
     });
+    // opaqueredirect:服务端返回了重定向,manual 模式下无法读 body
+    if (resp.type === 'opaqueredirect' || resp.status === 0) {
+      return c.json({
+        success: false,
+        message: `翻译端点返回重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
+      });
+    }
     if (!resp.ok) {
       const text = await resp.text();
       return c.json({ success: false, message: `翻译 API 返回 ${resp.status}：${text.slice(0, 200)}` });
