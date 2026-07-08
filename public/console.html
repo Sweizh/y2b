@@ -539,7 +539,8 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         <div class="flex flex-wrap items-center gap-3 mb-5 pb-4" style="border-bottom:1px solid var(--apple-border)">
           <button data-dom-id="change-password-btn" class="h-9 px-4 rounded-lg text-xs font-medium transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">修改密码</button>
           <div class="flex items-center gap-2">
-            <button data-dom-id="bili-qrcode-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">弹窗登录 B 站</button>
+            <button data-dom-id="bili-qrcode-login" class="h-9 px-4 rounded-lg text-xs font-semibold text-white transition-colors duration-150" style="background:var(--brand-500);color:var(--background-50)">扫码登录 B 站</button>
+            <button data-dom-id="bili-popup-login" class="h-9 px-4 rounded-lg text-xs font-medium transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">弹窗登录(备选)</button>
             <span data-dom-id="bili-login-status" class="text-xs" style="color:var(--apple-muted-foreground)">未登录</span>
           </div>
         </div>
@@ -2749,7 +2750,9 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   // ===== 绑定 OAuth/QR/修改密码 按钮事件 =====
   (function(){
     var biliQrBtn=document.querySelector('[data-dom-id="bili-qrcode-login"]');
-    if(biliQrBtn)biliQrBtn.addEventListener('click',openBiliPopupLogin);
+    if(biliQrBtn)biliQrBtn.addEventListener('click',openBiliQrcodeLogin);
+    var biliPopupBtn=document.querySelector('[data-dom-id="bili-popup-login"]');
+    if(biliPopupBtn)biliPopupBtn.addEventListener('click',openBiliPopupLogin);
     var ytOAuthBtn=document.querySelector('[data-dom-id="yt-oauth-login"]');
     if(ytOAuthBtn)ytOAuthBtn.addEventListener('click',openYtOAuthLogin);
     var changePwdBtn=document.querySelector('[data-dom-id="change-password-btn"]');
