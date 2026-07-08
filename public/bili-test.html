@@ -192,7 +192,7 @@
         <select id="endpoint-select" style="background:#1a1a1a;color:#e5e5e5;border:1px solid #404040;border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;">
           <option value="bilibili">passport.bilibili.com(默认)</option>
           <option value="biligame">passport.biligame.com(DSA CDN)</option>
-          <option value="tv" disabled>passport.snm0516.aisee.tv(TV 登录,需 appkey 签名,待实现)</option>
+          <option value="tv">passport.snm0516.aisee.tv(TV 登录,access_token)</option>
         </select>
       </div>
     </div>
@@ -229,6 +229,7 @@
     // ====== 状态 ======
     var qrcodeKey = null;
     var expiresAt = 0;
+    var loginType = 'web';  // 'web' 或 'tv',从 qrcode 响应拿
     var pollTimer = null;
     var countdownTimer = null;
 
@@ -347,6 +348,7 @@
           // 成功拿到二维码
           qrcodeKey = d.qrcode_key;
           expiresAt = d.expires_at;
+          loginType = d.login_type || 'web';
           // qrcode_url 是扫码跳转网页 URL,不是图片,需用 QR 库转成二维码图片
           if (typeof qrcode === 'undefined') {
             setStatus('✕ QR 库未加载(CDN 失败?),请检查网络', 'error');
@@ -401,7 +403,7 @@
     function startPolling() {
       pollTimer = setInterval(function () {
         if (!qrcodeKey) return;
-        fetch(API_BASE + '/bili/qrcode-status?qrcode_key=' + encodeURIComponent(qrcodeKey) + '&endpoint=' + encodeURIComponent(endpointSelect.value))
+        fetch(API_BASE + '/bili/qrcode-status?qrcode_key=' + encodeURIComponent(qrcodeKey) + '&endpoint=' + encodeURIComponent(endpointSelect.value) + '&login_type=' + encodeURIComponent(loginType))
           .then(function (resp) {
             return resp.text().then(function (text) {
               try { return JSON.parse(text); }
@@ -422,8 +424,9 @@
               log('POLL', 'scanned', '');
             } else if (d.status === 'success') {
               clearTimers();
-              setStatus('✓ 登录成功!Vercel IP 完全可绕过 B 站风控', 'success');
-              log('POLL', 'success: uname=' + (d.uname || '(未知)'), 'ok');
+              var loginLabel = (d.login_type === 'tv') ? 'TV 登录(access_token)' : 'Web 登录(SESSDATA)';
+              setStatus('✓ ' + loginLabel + '成功!Vercel IP 完全可绕过 B 站风控', 'success');
+              log('POLL', 'success: ' + loginLabel, 'ok');
               showResult(d);
             } else if (d.status === 'expired') {
               clearTimers();
@@ -448,10 +451,18 @@
     // ====== 显示登录成功结果 ======
     function showResult(d) {
       resultSection.classList.add('visible');
-      document.getElementById('result-uname').textContent = '(status 接口未返回,需调 nav)';
-      document.getElementById('result-sessdata').textContent = d.sessdata ? d.sessdata.slice(0, 8) + '…' : '--';
-      document.getElementById('result-jct').textContent = d.bili_jct ? d.bili_jct.slice(0, 8) + '…' : '--';
-      document.getElementById('result-uid').textContent = d.dede_user_id || '--';
+      if (d.login_type === 'tv' || d.access_token) {
+        // TV 登录结果
+        document.getElementById('result-uname').textContent = 'mid: ' + (d.mid || '(未知)');
+        document.getElementById('result-sessdata').textContent = d.access_token ? d.access_token.slice(0, 8) + '…(access_token)' : '--';
+        document.getElementById('result-jct').textContent = d.refresh_token ? d.refresh_token.slice(0, 8) + '…(refresh_token)' : '--';
+        document.getElementById('result-uid').textContent = d.mid || '--';
+      } else {
+        document.getElementById('result-uname').textContent = '(status 接口未返回,需调 nav)';
+        document.getElementById('result-sessdata').textContent = d.sessdata ? d.sessdata.slice(0, 8) + '…' : '--';
+        document.getElementById('result-jct').textContent = d.bili_jct ? d.bili_jct.slice(0, 8) + '…' : '--';
+        document.getElementById('result-uid').textContent = d.dede_user_id || '--';
+      }
     }
 
     // ====== 事件绑定 ======
