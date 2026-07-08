@@ -383,7 +383,7 @@ export function initChannels() {
     // Season options
     var seasonOpts = '<option value="">不加入合集</option>';
     if (seasons.length === 0) {
-      seasonOpts = '<option value="" disabled>需先配置 B 站凭证</option>';
+      seasonOpts = '<option value="" disabled>暂无合集(可在 B 站创作中心创建)</option>';
     } else {
       seasons.forEach(function (s) {
         var sid = escapeHtml(String(s.id || s.season_id || ''));

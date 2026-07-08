@@ -107,14 +107,22 @@ export function initManual() {
       .then(function (d) {
         // 适配多种返回结构:{seasons:[...]}/{list:[...]}/[...]
         let seasons = [];
-        if (d && d.error) seasons = [];
-        else if (Array.isArray(d)) seasons = d;
+        let errMsg = '';
+        if (d && d.error) {
+          seasons = [];
+          errMsg = d.error;
+        } else if (Array.isArray(d)) seasons = d;
         else if (d.seasons) seasons = d.seasons;
         else if (d.list) seasons = d.list;
         else if (d.items) seasons = d.items;
         let seasonOpts = '<option value="">不指定合集(用频道默认)</option>';
         if (seasons.length === 0) {
-          seasonOpts = '<option value="" disabled>需先配置 B 站凭证</option>';
+          // 区分"未配置凭证" / "API 报错" / "暂无合集"
+          if (errMsg) {
+            seasonOpts = '<option value="" disabled>' + escapeHtml(errMsg.slice(0, 60)) + '</option>';
+          } else {
+            seasonOpts = '<option value="" disabled>暂无合集(可在 B 站创作中心创建)</option>';
+          }
         } else {
           seasons.forEach(function (s) {
             const sid = escapeHtml(String(s.id || s.season_id || ''));
@@ -128,6 +136,9 @@ export function initManual() {
       })
       .catch(function (e) {
         console.warn('[loadManualSeasonOptions]', e);
+        if (manualSeasonSelect) {
+          manualSeasonSelect.innerHTML = '<option value="" disabled>加载合集失败</option>';
+        }
       });
   }
   loadManualSeasonOptions();

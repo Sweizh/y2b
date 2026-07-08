@@ -1,10 +1,17 @@
 // B 站相关代理路由：合集列表 / 分区列表 / Cookie 测试
 // 参考 https://sessionhu.github.io/bilibili-API-collect/
+//
+// 注意:Cloudflare Worker 出口 IP 被 B 站反爬(返回 HTML 登录页而非 JSON),
+// 所以 /seasons 和 /test/bili 都走 Vercel Edge Function 代理(与 bili_login.ts 同一方案)。
 
 import { Hono } from 'hono';
 import { getRawConfig } from '../kv';
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Vercel Edge 代理(绕过 CF Worker IP 对 B 站的反爬)
+const VERCEL_BILI_PROXY = 'https://y2b-six.vercel.app';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // 静态投稿分区表（B 站分区变动少，内置以减少 API 调用）
 // 来源：bilibili-API-collect/docs/video/archive_channel.md
@@ -61,6 +68,42 @@ const STATIC_TIDS: Array<{ tid: number; name: string; parent?: number }> = [
   { tid: 49, name: '综合 -- 论坛活动' },
 ];
 
+// 通过 Vercel Edge 代理调 B 站 seasons API,绕过 CF Worker IP 反爬
+async function fetchSeasonsViaVercel(cfg: any): Promise<any> {
+  const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/seasons`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+    body: JSON.stringify({
+      sessdata: cfg.bili_sessdata,
+      bili_jct: cfg.bili_jct,
+      buvid3: cfg.bili_buvid3 || '',
+    }),
+  });
+  const data = await resp.json() as any;
+  if (data.error) {
+    throw new Error(data.error + (data.bodyPreview ? ` (预览: ${String(data.bodyPreview).slice(0, 80)})` : ''));
+  }
+  return data.seasons;
+}
+
+// 通过 Vercel Edge 代理调 B 站 nav API,绕过 CF Worker IP 反爬
+async function fetchNavViaVercel(cfg: any): Promise<any> {
+  const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/nav`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+    body: JSON.stringify({
+      sessdata: cfg.bili_sessdata,
+      bili_jct: cfg.bili_jct || '',
+      buvid3: cfg.bili_buvid3 || '',
+    }),
+  });
+  const data = await resp.json() as any;
+  if (data.error) {
+    throw new Error(data.error);
+  }
+  return data.nav;
+}
+
 // 代理拉取 B 站合集列表
 // 参考 bilibili-API-collect: https://member.bilibili.com/x2/creative/web/seasons
 app.get('/seasons', async (c) => {
@@ -69,13 +112,7 @@ app.get('/seasons', async (c) => {
     return c.json({ error: '请先配置 B 站凭证' }, 400);
   }
   try {
-    const resp = await fetch('https://member.bilibili.com/x2/creative/web/seasons', {
-      headers: {
-        'Cookie': `SESSDATA=${cfg.bili_sessdata}; bili_jct=${cfg.bili_jct}; buvid3=${cfg.bili_buvid3 || ''}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
-    const data = await resp.json() as any;
+    const data = await fetchSeasonsViaVercel(cfg);
     if (data.code !== 0) {
       return c.json({ error: data.message || '获取合集列表失败', raw: data }, 502);
     }
@@ -92,19 +129,14 @@ app.get('/tids', async (c) => {
 
 // 测试 B 站 Cookie 有效性
 // 参考 bilibili-API-collect: https://api.bilibili.com/x/web-interface/nav
+// 通过 Vercel Edge 代理绕过 CF Worker IP 对 B 站的反爬
 app.post('/test/bili', async (c) => {
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.bili_sessdata) {
     return c.json({ success: false, message: '请先配置 B 站 SESSDATA' }, 400);
   }
   try {
-    const resp = await fetch('https://api.bilibili.com/x/web-interface/nav', {
-      headers: {
-        'Cookie': `SESSDATA=${cfg.bili_sessdata}; bili_jct=${cfg.bili_jct || ''}; buvid3=${cfg.bili_buvid3 || ''}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
-    const data = await resp.json() as any;
+    const data = await fetchNavViaVercel(cfg);
     if (data.code !== 0) {
       return c.json({
         success: false,
