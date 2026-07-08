@@ -70,7 +70,7 @@ app.use('*', async (c, next) => {
 app.use('*', secureHeaders({
   contentSecurityPolicy: {
     defaultSrc: ["'self'"],
-    scriptSrc: ["'self'", "'unsafe-inline'"],
+    scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],  // unpkg: Lucide 图标库
     styleSrc: ["'self'", "'unsafe-inline'"],  // Tailwind 内联样式
     imgSrc: ["'self'", 'data:', 'https:'],     // YouTube 头像等外部图
     fontSrc: ["'self'", 'data:'],
@@ -206,6 +206,9 @@ app.get('/', (c) => serveStatic(c, '/'));
 app.get('/index.html', (c) => serveStatic(c, '/index.html'));
 app.get('/login.html', (c) => serveStatic(c, '/login.html'));
 app.get('/console.html', (c) => serveStatic(c, '/console.html'));
+// 静态构建产物:CSS / JS bundle
+app.get('/css/*', (c) => serveStatic(c, new URL(c.req.url).pathname));
+app.get('/js/*', (c) => serveStatic(c, new URL(c.req.url).pathname));
 
 // 404 兜底
 app.notFound((c) => {
