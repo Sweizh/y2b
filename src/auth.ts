@@ -45,7 +45,8 @@ export async function destroySession(kv: KVNamespace, sessionId: string): Promis
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  // SEC-07: cost 提到 12(~300ms/次),增大暴力破解成本
+  return bcrypt.hash(password, 12);
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {

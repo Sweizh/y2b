@@ -64,7 +64,22 @@ app.use('*', async (c, next) => {
 });
 
 // 全局中间件
-app.use('*', secureHeaders());
+// SEC-06: 显式配置 CSP,阻断 XSS 外泄数据到外部域(connect-src 'self')、防点击劫持(frame-ancestors 'none')
+// 注:scriptSrc 暂保留 'unsafe-inline'(console.html 有大量内联事件处理器,后续逐步收敛为 nonce)
+// 即便允许内联脚本,connect-src 'self' 仍能阻断注入的 fetch 外泄凭证
+app.use('*', secureHeaders({
+  contentSecurityPolicy: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'unsafe-inline'"],
+    styleSrc: ["'self'", "'unsafe-inline'"],  // Tailwind 内联样式
+    imgSrc: ["'self'", 'data:', 'https:'],     // YouTube 头像等外部图
+    fontSrc: ["'self'", 'data:'],
+    connectSrc: ["'self'"],                     // 关键:阻断 XSS 向外部域外泄
+    frameAncestors: ["'none'"],                 // 防点击劫持
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+  },
+}));
 // CORS:仅在显式配置 ALLOWED_ORIGINS 时启用跨域,且使用白名单
 // 默认行为:同源(不返回 ACAO 头),浏览器自动允许同源请求
 // 配置示例:ALLOWED_ORIGINS="https://y2b.sweizh.top,https://yt2bili.xxx.workers.dev"
@@ -90,8 +105,9 @@ const PUBLIC_PATHS = new Set([
   '/api/logout',
   '/api/init-status',
   '/api/config/init',
-  '/api/youtube/oauth/start',     // OAuth 起始页(无 Session,用 state 关联)
-  '/api/youtube/oauth/callback',  // OAuth 回调页(用 state 关联,弹窗跳转后 Cookie 上下文丢失)
+  // SEC-02: /start 改为需要登录(弹窗由管理员同源打开,Strict Cookie 会发送)
+  // /callback 仍公开(Google 重定向跨站导航,Strict Cookie 不发送),用 state 绑定 session 校验
+  '/api/youtube/oauth/callback',
 ]);
 const PIPELINE_PREFIX = '/api/pipeline';
 const PIPELINE_PUBLIC_PATHS = [
@@ -99,7 +115,8 @@ const PIPELINE_PUBLIC_PATHS = [
 ];
 
 app.use('/api/*', async (c, next) => {
-  const path = new URL(c.req.url).pathname;
+  const url = new URL(c.req.url);
+  const path = url.pathname;
   // Pipeline 接口由 pipeline 路由内部校验 Bearer Token，这里跳过
   if (path.startsWith(PIPELINE_PREFIX)) {
     return next();
@@ -107,6 +124,36 @@ app.use('/api/*', async (c, next) => {
   // 公开接口跳过
   if (PUBLIC_PATHS.has(path)) {
     return next();
+  }
+  // SEC-05: CSRF 纵深防御 — 状态变更方法校验 Origin/Referer 同源
+  // SameSite=Strict 是主防线,此处为第二道防线(CORS 配错/老旧浏览器场景)
+  const method = c.req.method.toUpperCase();
+  if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+    const originHdr = c.req.header('Origin') || c.req.header('Referer') || '';
+    let isAllowed = false;
+    if (!originHdr) {
+      // 无 Origin/Referer:非浏览器请求或同源表单,放行(依赖 SameSite Cookie 兜底)
+      isAllowed = true;
+    } else {
+      try {
+        const u = new URL(originHdr);
+        isAllowed = u.host === url.host;
+        // 或在 ALLOWED_ORIGINS 白名单中
+        if (!isAllowed) {
+          const allowed = (c.env as any).ALLOWED_ORIGINS;
+          if (allowed) {
+            const list = allowed.split(',').map((s: string) => s.trim());
+            isAllowed = list.indexOf(u.origin) >= 0;
+          }
+        }
+      } catch {
+        isAllowed = false;
+      }
+    }
+    if (!isAllowed) {
+      logEvent('csrf', 'denied', { method, path, origin: originHdr.slice(0, 100) });
+      return c.json({ error: '跨站请求被拒绝', code: 'CSRF_DENIED' }, 403);
+    }
   }
   // 校验 Session
   const sessionId = getSessionFromRequest(c.req.raw);

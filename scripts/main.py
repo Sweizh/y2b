@@ -761,6 +761,21 @@ def main():
             log("cookie_check", "need_notify")
             notify_cookie_expiry(cfg)
 
+        # 2.5 刷新 YouTube OAuth access_token(CODE-10: 确保下载/搜索前 token 有效)
+        # 注:仅刷新 access_token;SAPISID cookies 过期需重新走 OAuth 流程(见 README)
+        try:
+            refresh_result = worker_post("/api/pipeline/yt-oauth-refresh", {})
+            if refresh_result.get("refreshed"):
+                log("yt_oauth_refresh", "refreshed", expires_at=refresh_result.get("expires_at"))
+                # 刷新成功,重新拉取配置拿到最新 access_token
+                data = worker_get("/api/pipeline/config")
+                cfg = data.get("config", {}) or {}
+            else:
+                log("yt_oauth_refresh", "skipped", reason="not_expired")
+        except Exception as e:
+            log("yt_oauth_refresh", "warning", error=str(e)[:200])
+            # 刷新失败不阻塞主流程,下载时若 token 无效会各自报错
+
         # 3. 收集待处理视频
         results = []
         failed_results = []  # 单条回写失败的视频,末尾再批量重试一次
@@ -797,14 +812,23 @@ def main():
                     channel=channel.get("name", ""), error=str(e)[:200])
 
         # 3.2 处理 manual_queue 中的视频
+        # CODE-01: 仅当 processed 中该视频 status=='success' 才跳过,失败视频需重试
+        # CODE-02: 用 last_error_at 做冷却窗口,避免近期失败视频立即重试触发 B 站/YouTube 限流
+        COOLDOWN_SECONDS = 600  # 10 分钟冷却
+        now_ts = time.time()
         for item in manual_queue:
             if not isinstance(item, dict):
                 continue
             video_id = item.get("video_id")
             if not video_id:
                 continue
-            # manual_queue 项可能在频道处理中已被处理
-            if video_id in processed:
+            # manual_queue 项可能在频道处理中已被处理(仅成功才算已处理,失败需重试)
+            proc = processed.get(video_id, {})
+            if proc.get("status") == "success":
+                continue
+            # 冷却:距上次失败 < 10 分钟则跳过,避免立即重试触发限流
+            last_err_at = item.get("last_error_at")
+            if last_err_at and (now_ts - int(last_err_at) / 1000) < COOLDOWN_SECONDS:
                 continue
             log("process", "start", video_id=video_id, source="manual_queue")
             # 找到对应的频道配置

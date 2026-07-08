@@ -437,10 +437,28 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       result={type:'yt-oauth-result',success:false,error:params.error||'OAuth 登录失败'};
     }
     if(result){
-      try{window.opener&&window.opener.postMessage(result,'*');}catch(e){}
+      // SEC-04: targetOrigin 用具体域而非 '*',防止 OAuth 邮箱外泄给任意站点
+      try{window.opener&&window.opener.postMessage(result,window.location.origin);}catch(e){}
       // 显示关闭提示,然后尝试关闭窗口
       document.title='OAuth 登录完成';
-      document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-family:system-ui,sans-serif;background:#fff;color:#333"><p style="font-size:16px;font-weight:500">'+(result.success?'登录成功':'登录失败')+'</p><p style="font-size:13px;color:#888">'+(result.error||result.email||'')+'</p><a href="javascript:void(0)" onclick="try{window.close();}catch(e){}" style="font-size:13px;color:#007aff;text-decoration:underline">可关闭此窗口</a></div>';
+      // SEC-01: 用 DOM API + textContent 构造,避免 URL hash 字段注入 XSS
+      // (result.error/result.email 来自 URL hash,未转义直接拼 innerHTML 可导致完整系统接管)
+      var wrap=document.createElement('div');
+      wrap.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-family:system-ui,sans-serif;background:#fff;color:#333';
+      var p1=document.createElement('p');
+      p1.style.cssText='font-size:16px;font-weight:500';
+      p1.textContent=result.success?'登录成功':'登录失败';
+      var p2=document.createElement('p');
+      p2.style.cssText='font-size:13px;color:#888';
+      p2.textContent=result.error||result.email||'';
+      var a=document.createElement('a');
+      a.href='javascript:void(0)';
+      a.style.cssText='font-size:13px;color:#007aff;text-decoration:underline';
+      a.textContent='可关闭此窗口';
+      a.onclick=function(){try{window.close();}catch(e){}};
+      wrap.appendChild(p1);wrap.appendChild(p2);wrap.appendChild(a);
+      document.body.innerHTML='';
+      document.body.appendChild(wrap);
       setTimeout(function(){try{window.close();}catch(e){}},800);
     }
   })();
@@ -538,36 +556,36 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
           <!-- B站 SESSDATA -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 SESSDATA</label>
+            <label for="fld-bili-sessdata" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 SESSDATA</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- B站 bili_jct -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 bili_jct</label>
+            <label for="fld-bili-jct" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 bili_jct</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- B站 buvid3 -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 buvid3</label>
+            <label for="fld-bili-buvid3" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 buvid3</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- B站 ac_time_value -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 ac_time_value</label>
+            <label for="fld-bili-ac-time-value" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 ac_time_value</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
@@ -581,52 +599,52 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
             </div>
             <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mt-1" style="display:none">
               <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client ID</label>
-                <input type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+                <label for="fld-yt-oauth-client-id" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client ID</label>
+                <input id="fld-yt-oauth-client-id" type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               </div>
               <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client Secret</label>
-                <input type="password" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+                <label for="fld-yt-oauth-client-secret" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Client Secret</label>
+                <input id="fld-yt-oauth-client-secret" type="password" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               </div>
               <div class="flex flex-col gap-1.5 md:col-span-2">
-                <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Redirect URI</label>
-                <input type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+                <label for="fld-yt-oauth-redirect-uri" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube OAuth Redirect URI</label>
+                <input id="fld-yt-oauth-redirect-uri" type="text" value="" placeholder="未设置" class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               </div>
             </div>
           </div>
 
           <!-- YouTube API Key -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube API Key</label>
+            <label for="fld-yt-api-key" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube API Key</label>
             <div class="flex items-center gap-2">
-              <input type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- YouTube Cookie (full width textarea) -->
           <div class="flex flex-col gap-1.5 md:col-span-2">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube Cookie</label>
+            <label for="fld-yt-cookie" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">YouTube Cookie</label>
             <div class="flex items-start gap-2">
-              <textarea rows="2" readonly placeholder="未设置" class="flex-1 px-3 py-2 rounded-lg text-xs font-mono resize-none" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)"></textarea>
+              <textarea id="fld-yt-cookie" rows="2" readonly placeholder="未设置" class="flex-1 px-3 py-2 rounded-lg text-xs font-mono resize-none" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)"></textarea>
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- GitHub Token -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">GitHub Token</label>
+            <label for="fld-github-token" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">GitHub Token</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-github-token" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- GitHub 仓库 -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">GitHub 仓库</label>
+            <label for="fld-github-repo" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">GitHub 仓库</label>
             <div class="flex items-center gap-2">
-              <input type="text" value="" placeholder="如 Sweizh/y2b" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-github-repo" type="text" value="" placeholder="如 Sweizh/y2b" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
             </div>
           </div>
         </div>
@@ -650,44 +668,44 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
 
           <!-- 语音识别 API 地址 -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">语音识别 API 地址</label>
+            <label for="fld-asr-api-url" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">语音识别 API 地址</label>
             <div class="flex items-center gap-2">
-              <input type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-xs font-mono truncate" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-asr-api-url" type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-xs font-mono truncate" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- 语音识别 API 密钥 -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">语音识别 API 密钥</label>
+            <label for="fld-asr-api-key" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">语音识别 API 密钥</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-asr-api-key" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- 翻译 API 地址 -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">翻译 API 地址</label>
+            <label for="fld-translate-api-url" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">翻译 API 地址</label>
             <div class="flex items-center gap-2">
-              <input type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-xs font-mono truncate" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-translate-api-url" type="text" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-xs font-mono truncate" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- 翻译 API 密钥 -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">翻译 API 密钥</label>
+            <label for="fld-translate-api-key" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">翻译 API 密钥</label>
             <div class="flex items-center gap-2">
-              <input type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              <input id="fld-translate-api-key" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
               <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
             </div>
           </div>
 
           <!-- 标题翻译模板 -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium" style="color:var(--apple-muted-foreground)">标题翻译模板</label>
-            <input type="text" data-field="title_template" value="" placeholder="支持变量: {channel}(频道名)、{title}(翻译后标题),留空则不翻译不套模板。示例:【{channel}】{title}" readonly class="h-9 px-3 rounded-lg text-xs font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+            <label for="fld-title-template" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">标题翻译模板</label>
+            <input id="fld-title-template" type="text" data-field="title_template" value="" placeholder="支持变量: {channel}(频道名)、{title}(翻译后标题),留空则不翻译不套模板。示例:【{channel}】{title}" readonly class="h-9 px-3 rounded-lg text-xs font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
           </div>
         </div>
 
@@ -1001,6 +1019,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
     h.textContent=title;
     var closeIcon=document.createElement('button');
     closeIcon.innerHTML='&times;';
+    closeIcon.setAttribute('aria-label','关闭');
     closeIcon.style.cssText='background:none;border:none;font-size:24px;cursor:pointer;color:var(--apple-muted-foreground);padding:0;line-height:1;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px';
     closeIcon.onmouseenter=function(){closeIcon.style.background='var(--apple-secondary)';};
     closeIcon.onmouseleave=function(){closeIcon.style.background='none';};
@@ -1573,7 +1592,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       var wrap=getSearchResultsContainer();
       wrap.innerHTML='<div class="search-results-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
         '<span style="font-size:12px;font-weight:600;color:var(--apple-foreground)">搜索「'+escapeHtml(q)+'」的结果</span>'+
-        '<button class="search-clear-btn" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
+        '<button class="search-clear-btn" aria-label="关闭搜索结果" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
       '</div>'+
       '<div style="background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:24px;text-align:center">'+
         '<p style="font-size:13px;color:var(--apple-muted-foreground)">搜索中…</p>'+
@@ -1586,7 +1605,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       var wrap=getSearchResultsContainer();
       wrap.innerHTML='<div class="search-results-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
         '<span style="font-size:12px;font-weight:600;color:var(--apple-foreground)">搜索结果</span>'+
-        '<button class="search-clear-btn" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
+        '<button class="search-clear-btn" aria-label="关闭搜索结果" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
       '</div>'+
       '<div style="background:var(--apple-background);border:1px solid var(--apple-border);border-radius:8px;padding:24px;text-align:center">'+
         '<p style="font-size:13px;color:var(--state-error)">'+escapeHtml(msg)+'</p>'+
@@ -1600,7 +1619,7 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       var wrap=getSearchResultsContainer();
       var header='<div class="search-results-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
         '<span style="font-size:12px;font-weight:600;color:var(--apple-foreground)">搜索「'+escapeHtml(q||'')+'」的结果 ('+channels.length+')</span>'+
-        '<button class="search-clear-btn" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
+        '<button class="search-clear-btn" aria-label="关闭搜索结果" style="background:none;border:none;font-size:14px;color:var(--apple-muted-foreground);cursor:pointer;padding:2px 6px;line-height:1">×</button>'+
       '</div>';
 
       if(channels.length===0){
@@ -1807,28 +1826,28 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
         '</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding-top:12px;border-top:1px solid var(--apple-border)">'+
           '<div style="display:flex;flex-direction:column;gap:4px">'+
-            '<label style="font-size:12px;color:var(--apple-muted-foreground)">B站合集</label>'+
-            '<select data-field="season_id" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+seasonOpts+'</select>'+
+            '<label for="ch-season_id-'+cid+'" style="font-size:12px;color:var(--apple-muted-foreground)">B站合集</label>'+
+            '<select id="ch-season_id-'+cid+'" data-field="season_id" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+seasonOpts+'</select>'+
           '</div>'+
           '<div style="display:flex;flex-direction:column;gap:4px">'+
-            '<label style="font-size:12px;color:var(--apple-muted-foreground)">投稿分区</label>'+
-            '<select data-field="tid" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+tidOpts+'</select>'+
+            '<label for="ch-tid-'+cid+'" style="font-size:12px;color:var(--apple-muted-foreground)">投稿分区</label>'+
+            '<select id="ch-tid-'+cid+'" data-field="tid" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+tidOpts+'</select>'+
           '</div>'+
           '<div style="display:flex;flex-direction:column;gap:4px">'+
-            '<label style="font-size:12px;color:var(--apple-muted-foreground)">默认标签</label>'+
-            '<input type="text" data-field="tags" value="'+escapeHtml(ch.tags||'')+'" placeholder="逗号分隔" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)"/>'+
+            '<label for="ch-tags-'+cid+'" style="font-size:12px;color:var(--apple-muted-foreground)">默认标签</label>'+
+            '<input type="text" id="ch-tags-'+cid+'" data-field="tags" value="'+escapeHtml(ch.tags||'')+'" placeholder="逗号分隔" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)"/>'+
           '</div>'+
           '<div style="display:flex;flex-direction:column;gap:4px">'+
             '<label style="font-size:12px;color:var(--apple-muted-foreground)">投稿类型</label>'+
             '<div style="display:flex;align-items:center;gap:16px;height:32px">'+copyrightHtml+'</div>'+
           '</div>'+
           '<div style="display:flex;flex-direction:column;gap:4px">'+
-            '<label style="font-size:12px;color:var(--apple-muted-foreground)">字幕模式</label>'+
-            '<select data-field="subtitle_mode" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+smOpts+'</select>'+
+            '<label for="ch-subtitle_mode-'+cid+'" style="font-size:12px;color:var(--apple-muted-foreground)">字幕模式</label>'+
+            '<select id="ch-subtitle_mode-'+cid+'" data-field="subtitle_mode" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)">'+smOpts+'</select>'+
           '</div>'+
           '<div style="display:flex;align-items:center;justify-content:space-between">'+
-            '<label style="font-size:12px;color:var(--apple-muted-foreground)">启用自动投稿</label>'+
-            '<div data-toggle-channel="'+cid+'" data-enabled="'+(enabled?'1':'0')+'" style="width:40px;height:20px;border-radius:9999px;background:'+toggleBg+';cursor:pointer;position:relative;transition:background .18s">'+
+            '<label id="ch-toggle-label-'+cid+'" style="font-size:12px;color:var(--apple-muted-foreground)">启用自动投稿</label>'+
+            '<div data-toggle-channel="'+cid+'" data-enabled="'+(enabled?'1':'0')+'" role="switch" tabindex="0" aria-checked="'+(enabled?'true':'false')+'" aria-labelledby="ch-toggle-label-'+cid+'" style="width:40px;height:20px;border-radius:9999px;background:'+toggleBg+';cursor:pointer;position:relative;transition:background .18s">'+
               '<div style="position:absolute;top:2px;'+toggleKnob+';width:16px;height:16px;border-radius:9999px;background:var(--background-50);transition:left .18s,right .18s"></div>'+
             '</div>'+
           '</div>'+
@@ -1911,12 +1930,19 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
           .then(function(d){
             if(d.error){showToast(d.error,'error');return;}
             toggle.setAttribute('data-enabled',newVal?'1':'0');
+            toggle.setAttribute('aria-checked',newVal?'true':'false');
             toggle.style.background=newVal?'var(--brand-500)':'var(--background-400)';
             knob.style.left=newVal?'':'2px';
             knob.style.right=newVal?'2px':'';
             showToast(newVal?'已启用':'已停用','success');
           })
           .catch(function(e){showToast('操作失败:'+(e.message||e),'error');});
+        });
+        toggle.addEventListener('keydown',function(e){
+          if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){
+            e.preventDefault();
+            toggle.click();
+          }
         });
       });
 
@@ -2621,6 +2647,8 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
       return;
     }
     function handler(e){
+      // SEC-03: 仅接受同源消息,防止任意页面伪造 OAuth 结果触发 UI 混淆/配置重载
+      if(e.origin!==window.location.origin)return;
       if(!e.data||e.data.type!=='yt-oauth-result')return;
       window.removeEventListener('message',handler);
       if(e.data.success){

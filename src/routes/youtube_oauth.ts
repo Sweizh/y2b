@@ -16,6 +16,7 @@
 
 import { Hono } from 'hono';
 import { getRawConfig, putConfig } from '../kv';
+import { getSessionFromRequest, getSession } from '../auth';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -45,18 +46,22 @@ function getRequestId(c: any): string {
   return c.req.header('x-request-id') || crypto.randomUUID();
 }
 
-// 起始页:重定向到 Google 授权
+// 起始页:重定向到 Google 授权(SEC-02: 需登录,index.ts 鉴权中间件已校验 Session)
 app.get('/start', async (c) => {
   const requestId = getRequestId(c);
+  // SEC-02: 把当前 sessionId 绑定到 state,/callback 凭 state 反查发起方是否已登录
+  const sessionId = getSessionFromRequest(c.req.raw);
+  if (!sessionId) {
+    return c.json({ error: '未登录,无法发起 OAuth' }, 401);
+  }
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.yt_client_id || !cfg.yt_client_secret || !cfg.yt_redirect_uri) {
     return c.json({ error: '请先在配置中填写 yt_client_id / yt_client_secret / yt_redirect_uri' }, 400);
   }
-  // 生成 state,存入 KV(TTL 10 分钟)
-  // state 不绑定 Session Cookie,因为弹窗跳转 Google 后再回来时 Cookie 上下文可能丢失
-  // 但 state 的存在性 + 单次使用即可防 CSRF(回调后立即删除)
+  // 生成 state,值存 sessionId(TTL 10 分钟,单次使用)
+  // /callback 是 Google 跨站重定向,SameSite=Strict Cookie 不发送,但可凭 state 反查到发起方 session
   const state = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-  await c.env.YT2BILI_KV.put(`oauth_state:${state}`, requestId, { expirationTtl: OAUTH_STATE_TTL });
+  await c.env.YT2BILI_KV.put(`oauth_state:${state}`, sessionId, { expirationTtl: OAUTH_STATE_TTL });
 
   const params = new URLSearchParams({
     client_id: cfg.yt_client_id,
@@ -95,6 +100,12 @@ app.get('/callback', async (c) => {
     return c.redirect(`/console.html#youtube-oauth-failed&error=${encodeURIComponent('state 无效或已过期,请重新登录')}`);
   }
   await c.env.YT2BILI_KV.delete(stateKey);
+  // SEC-02: 校验 state 绑定的 session 仍有效,确保 OAuth 由已登录管理员发起(防凭证替换)
+  const sessionOk = await getSession(c.env.YT2BILI_KV, stateVal);
+  if (!sessionOk) {
+    log('yt_oauth_callback', 'session_invalid', { requestId });
+    return c.redirect(`/console.html#youtube-oauth-failed&error=${encodeURIComponent('发起 OAuth 的会话已失效,请重新登录')}`);
+  }
 
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.yt_client_id || !cfg.yt_client_secret || !cfg.yt_redirect_uri) {

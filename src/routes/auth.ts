@@ -81,6 +81,14 @@ app.post('/login', async (c) => {
     log('login', 'rejected', { requestId, reason: 'no_password', duration: Date.now() - start });
     return c.json({ error: '请输入密码' }, 400);
   }
+  // SEC-07: 登录限速 — 按 IP 维度,5 分钟内失败 5 次则拒绝(KV 最终一致性,作基础防护)
+  const clientIp = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+  const rateKey = `login_fail:${clientIp}`;
+  const failCount = parseInt(await c.env.YT2BILI_KV.get(rateKey) || '0', 10);
+  if (failCount >= 5) {
+    log('login', 'rate_limited', { requestId, ip: clientIp.slice(0, 64), failCount });
+    return c.json({ error: '尝试过于频繁,请 5 分钟后再试' }, 429);
+  }
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.initialized) {
     log('login', 'rejected', { requestId, reason: 'not_initialized', duration: Date.now() - start });
@@ -88,10 +96,19 @@ app.post('/login', async (c) => {
   }
   const ok = await verifyPassword(password, cfg.admin_password || '');
   if (!ok) {
-    log('login', 'failed', { requestId, reason: 'wrong_password', duration: Date.now() - start });
+    // SEC-07: 失败计数 +1,TTL 5 分钟
+    await c.env.YT2BILI_KV.put(rateKey, String(failCount + 1), { expirationTtl: 300 });
+    log('login', 'failed', { requestId, reason: 'wrong_password', duration: Date.now() - start, failCount: failCount + 1 });
     return c.json({ error: '密码错误' }, 401);
   }
+  // SEC-10: Session Fixation — 销毁登录前可能存在的旧 session,再生成新 session
+  const oldSessionId = getSessionFromRequest(c.req.raw);
   const sessionId = await createSession(c.env.YT2BILI_KV);
+  if (oldSessionId && oldSessionId !== sessionId) {
+    await destroySession(c.env.YT2BILI_KV, oldSessionId);
+  }
+  // SEC-07: 登录成功,清零失败计数
+  await c.env.YT2BILI_KV.delete(rateKey);
   c.header('Set-Cookie', getSessionCookieHeader(sessionId));
   log('login', 'success', { requestId, duration: Date.now() - start });
   return c.json({ success: true });

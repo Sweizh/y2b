@@ -13,8 +13,8 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 - **GitHub Actions 流水线**：Worker `/api/status/trigger` 触发 `repository_dispatch` 事件,启动 `process.yml` 运行 Python Runner
 - **Python Runner**：yt-dlp 下载 → ffmpeg 提取音频 → ASR 转写 → 翻译字幕 → bilibili-api-python 上传 → 追加合集
 - **标题翻译模板**：全局配置 `title_template`,支持变量 `{channel}`(频道名)、`{title}`(翻译后标题),通过翻译 API prompt 注入实现;留空则不翻译不套模板(向后兼容)
-- **Cookie 自动续期**：检测 ac_time_value 距过期 < 1 小时自动调用 B 站刷新接口,新 Cookie 回写 Worker
-- **失败通知**：连续失败 ≥ 3 次调用 Webhook(支持企业微信/钉钉/Server酱)
+- **Cookie 过期告警**：检测 ac_time_value 距过期 < 1 小时通过 Webhook 告警(续期需人工在控制台重新扫码登录,Runner 无法自动完成)
+- **失败通知**：单次运行失败率 ≥ 50%(且至少 2 个视频)调用 Webhook(支持企业微信/钉钉/Server酱)
 - **结构化日志**：Worker 关键路径输出 JSON 日志(requestId/event/status/duration),`wrangler tail` 可按字段过滤
 - **明暗主题**：跟随系统 / 记忆偏好
 
@@ -192,7 +192,7 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 4. 填写 GitHub Token + 仓库
 5. (可选)配置「标题翻译模板」:支持变量 `{channel}`(频道名)、`{title}`(翻译后标题),示例 `【{channel}】{title}`。Runner 在上传前调翻译 API,prompt 中注入模板(预先替换 `{channel}`,LLM 只填 `{title}`)。**留空则不翻译不套模板**,沿用 yt-dlp 原始标题(向后兼容)
 6. 每项填完点「测试」按钮验证连通性
-7. (可选)在运行状态区块底部配置「失败通知」Webhook URL,启用后连续失败 ≥ 3 次会发送告警
+7. (可选)在运行状态区块底部配置「失败通知」Webhook URL,启用后单次运行失败率 ≥ 50%(且至少 2 个视频)会发送告警
 
 ### 手动队列合集选择
 
@@ -297,7 +297,7 @@ npm run deploy
 - **钉钉群机器人**:`https://oapi.dingtalk.com/robot/send?access_token=xxx`
 - **Server 酱**:`https://sctapi.ftqq.com/SCTxxxxx.send`
 
-启用后,Python Runner 在连续失败 ≥ 3 次时调用该 Webhook 发送告警,内容包括失败次数、Worker URL、时间。
+启用后,Python Runner 在单次运行失败率 ≥ 50%(且至少 2 个视频)时调用该 Webhook 发送告警,内容包括失败次数、Worker URL、时间。
 
 ## API 端点一览
 
@@ -362,8 +362,9 @@ KV Key 设计：
    ├─ 启用的频道列表
    ├─ 已处理视频去重表(processed)
    └─ 手动队列(manual_queue)
-2. Cookie 续期检查
-   └─ ac_time_value 距过期 < 1 小时 → 调用 B 站 nav 接口刷新 → POST /api/pipeline/cookies 回写
+2. 凭证检查与刷新
+   ├─ B 站 Cookie:ac_time_value 距过期 < 1 小时 → Webhook 告警(续期需人工在控制台重新扫码登录,Runner 无法自动完成)
+   └─ YouTube OAuth:access_token 剩余 ≤ 5 分钟 → POST /api/pipeline/yt-oauth-refresh 刷新(不重铸 cookies)
 3. 遍历启用频道
    ├─ yt-dlp 拉取频道最新 5 条视频
    ├─ 过滤已在 processed 去重表中的 video_id
@@ -381,7 +382,7 @@ KV Key 设计：
    ├─ 可重试失败(网络/限流):保留 manual_queue,retry_count + 1,超过 3 次移除
    └─ 不可重试失败:从 manual_queue 移除
 7. 失败通知
-   └─ 连续失败 ≥ 3 次且 notify_webhook 已配置 → 调用 Webhook(企业微信/钉钉/Server酱)
+   └─ 单次失败率 ≥ 50%(且至少 2 个视频)且 notify_webhook 已配置 → 调用 Webhook(企业微信/钉钉/Server酱)
 ```
 
 **单视频处理失败处理**:
@@ -389,11 +390,11 @@ KV Key 设计：
 - 可重试失败(网络/限流)保留在 manual_queue 等待下次运行
 - 不可重试失败(永久失败)直接清理 manual_queue
 
-**Cookie 续期**:
+**Cookie 过期处理**:
 - 检测 ac_time_value 距过期时间
-- < 1 小时触发续期流程
-- 续期成功后调用 `POST /api/pipeline/cookies` 回写新 Cookie
-- 续期失败不影响主流程,仅记日志
+- < 1 小时通过 Webhook 发送告警,提示人工重新扫码登录
+- B 站 SESSDATA 续期需二次登录(QR Code),Runner 无法自动完成
+- 告警不影响主流程,继续使用现有 Cookie 处理(可能失败,由各步骤 try/except 捕获)
 
 **日志输出**:
 - Python Runner 输出结构化 JSON 日志,与 Worker 日志格式一致

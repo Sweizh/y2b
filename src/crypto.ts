@@ -8,8 +8,17 @@
 const ENC_PREFIX = 'enc:v1:';
 
 async function deriveKey(encryptionKey: string): Promise<CryptoKey> {
+  // SEC-09: 拒绝低熵密钥,防止等价于 SHA-256(弱密码) 当 AES 密钥被离线暴力破解
+  // 要求:原始字符串至少 16 字节(128 bit);推荐 openssl rand -base64 32 生成 256 bit
+  const rawBytes = new TextEncoder().encode(encryptionKey);
+  if (rawBytes.length < 16) {
+    throw new Error(
+      'ENCRYPTION_KEY 熵不足:要求至少 16 字节随机串(推荐 openssl rand -base64 32 生成),当前仅 ' +
+      rawBytes.length + ' 字节'
+    );
+  }
   const enc = new TextEncoder();
-  // 先用 SHA-256 派生 32 字节密钥(兼容任意长度的输入字符串)
+  // 先用 SHA-256 派生 32 字节密钥(兼容任意长度输入字符串)
   // 注:此处的派生用于将任意长度输入归一化为 32 字节,不是密码学 KDF
   // 若 ENCRYPTION_KEY 是高熵随机串(文档建议 openssl rand -base64 32),安全性等价于直接用 AES-256
   const hash = await crypto.subtle.digest('SHA-256', enc.encode(encryptionKey));

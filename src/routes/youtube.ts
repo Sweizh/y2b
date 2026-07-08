@@ -26,7 +26,7 @@ app.get('/search', async (c) => {
       useOAuth = true;
       accessToken = cfg.yt_access_token;
     } else {
-      // 过期但已配置 OAuth,提示用户刷新(或调 /api/youtube/oauth/refresh,但本端点无 Pipeline Token,这里仅提示)
+      // 过期但已配置 OAuth,提示用户刷新(或由 Runner 调 /api/pipeline/yt-oauth-refresh,见 CODE-10)
       return c.json({ error: 'YouTube OAuth token 已过期,请重新登录或联系 Runner 刷新' }, 401);
     }
   }

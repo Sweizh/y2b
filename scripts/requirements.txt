@@ -1,4 +1,5 @@
 bilibili-api-python==16.2.0
-yt-dlp==2024.12.6
+# SEC-08: yt-dlp 放宽下限,跟进 YouTube 站点变更(原锁 2024.12.6 距今过旧,多 extractor 漏洞)
+yt-dlp>=2024.12.6
 # bilibili-api-python 16.2.0 要求 requests~=2.31.0,不能锁死 2.32.3 否则依赖冲突
 requests>=2.31.0,<2.32.0
