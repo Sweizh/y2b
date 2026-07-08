@@ -116,42 +116,79 @@ def extract_audio(video_path: str, audio_path: str) -> None:
     ], timeout=600)
 
 
-def call_asr(asr_api: str, asr_key: str, audio_path: str) -> str:
-    """调用 ASR API 转写音频,返回 SRT 字幕文本"""
+def _chat_completions_url(api: str) -> str:
+    """补全 OpenAI 兼容端点:用户可能只填了 base(如 https://api.xxx.com/v1),
+    自动补 /chat/completions;已含完整路径则原样返回。"""
+    endpoint = api.rstrip("/")
+    if not endpoint.endswith("/chat/completions"):
+        endpoint += "/chat/completions"
+    return endpoint
+
+
+def call_asr(asr_api: str, asr_key: str, audio_path: str, model: str = "mimo-v2.5-asr") -> str:
+    """调用 ASR API(OpenAI 兼容 Chat Completions 多模态)转写音频,返回转写文本
+
+    MiMo 等兼容服务商的 ASR 走 chat/completions 端点,音频以 base64 data URL
+    放在 message content(多模态 input_audio),而非 Whisper 的 multipart
+    /audio/transcriptions(xiaomimimo 无该端点,返回 404)。
+
+    注:MiMo ASR 网关会自行注入转写 prompt,不接受额外 text part
+    (传 text part 会返回 400 "ASR request must not include text parts")。
+    输出格式由网关决定(通常为纯文本),下游 SRT 解析对非 SRT 输出会
+    产出空字幕,但视频上传不受影响(字幕为非致命步骤)。
+    """
     if not asr_api or not asr_key:
         raise RuntimeError("ASR API 未配置")
-    # 读取音频文件
+    endpoint = _chat_completions_url(asr_api)
+    import base64
     with open(audio_path, "rb") as f:
-        audio_data = f.read()
-    # 假设 ASR API 接受 multipart 上传
+        audio_b64 = base64.b64encode(f.read()).decode()
+    ext = Path(audio_path).suffix.lower().lstrip(".") or "mp3"
+    mime = {"mp3": "audio/mpeg", "wav": "audio/wav", "m4a": "audio/mp4",
+            "ogg": "audio/ogg"}.get(ext, "audio/mpeg")
+    data_url = f"data:{mime};base64,{audio_b64}"
     resp = requests.post(
-        asr_api,
-        headers={"Authorization": f"Bearer {asr_key}"},
-        files={"file": (Path(audio_path).name, audio_data, "audio/mpeg")},
-        data={"model": "mimo-asr", "response_format": "srt"},
+        endpoint,
+        headers={
+            "Authorization": f"Bearer {asr_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": [{
+                "role": "user",
+                # 仅音频,不加 text part(网关自行注入转写 prompt,加 text 会 400)
+                "content": [
+                    {"type": "input_audio", "input_audio": {"data": data_url, "format": ext}},
+                ],
+            }],
+        },
         timeout=600,
     )
     if not resp.ok:
         raise RuntimeError(f"ASR API 返回 {resp.status_code}: {resp.text[:200]}")
-    return resp.text
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
 
 
-def call_translate(translate_api: str, translate_key: str, srt_content: str) -> str:
-    """调用翻译 API 翻译 SRT 字幕"""
+def call_translate(translate_api: str, translate_key: str, srt_content: str,
+                   model: str = "gpt-3.5-turbo") -> str:
+    """调用翻译 API(OpenAI 兼容 Chat Completions)翻译 SRT 字幕"""
     if not translate_api or not translate_key:
         raise RuntimeError("翻译 API 未配置")
+    endpoint = _chat_completions_url(translate_api)
     prompt = (
         "请将以下 SRT 字幕文件翻译为简体中文,保持 SRT 格式不变(含序号、时间轴、换行)。"
         "只输出翻译后的 SRT 内容,不要任何解释:\n\n" + srt_content
     )
     resp = requests.post(
-        translate_api,
+        endpoint,
         headers={
             "Authorization": f"Bearer {translate_key}",
             "Content-Type": "application/json",
         },
         json={
-            "model": "gpt-3.5-turbo",
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3,
         },
@@ -163,7 +200,8 @@ def call_translate(translate_api: str, translate_key: str, srt_content: str) -> 
     return data["choices"][0]["message"]["content"]
 
 
-def call_translate_title(translate_api: str, translate_key: str, original_title: str, template_with_channel: str) -> str:
+def call_translate_title(translate_api: str, translate_key: str, original_title: str,
+                          template_with_channel: str, model: str = "gpt-3.5-turbo") -> str:
     """调用翻译 API 把原标题翻译为中文并套用模板
 
     Args:
@@ -174,6 +212,7 @@ def call_translate_title(translate_api: str, translate_key: str, original_title:
     """
     if not translate_api or not translate_key:
         raise RuntimeError("翻译 API 未配置")
+    endpoint = _chat_completions_url(translate_api)
     prompt = (
         "请把以下英文视频标题翻译为简体中文,然后严格按以下格式输出,"
         "只输出最终标题,不要任何解释或引号。\n"
@@ -181,13 +220,13 @@ def call_translate_title(translate_api: str, translate_key: str, original_title:
         f"原标题:{original_title}"
     )
     resp = requests.post(
-        translate_api,
+        endpoint,
         headers={
             "Authorization": f"Bearer {translate_key}",
             "Content-Type": "application/json",
         },
         json={
-            "model": "gpt-3.5-turbo",
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3,
         },
@@ -502,6 +541,7 @@ def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_over
                     cfg.get("translate_key", ""),
                     title,
                     template_with_channel,
+                    model=cfg.get("translate_model") or "gpt-3.5-turbo",
                 )
                 title = translated[:80]  # B 站标题限 80 字
                 result["title"] = title
@@ -522,6 +562,7 @@ def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_over
         try:
             srt_original = call_asr(
                 cfg.get("asr_api", ""), cfg.get("asr_key", ""), audio_path,
+                model=cfg.get("asr_model") or "mimo-v2.5-asr",
             )
             log("asr", "success", video_id=video_id)
         except Exception as e:
@@ -536,6 +577,7 @@ def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_over
                 srt_translated = call_translate(
                     cfg.get("translate_api", ""), cfg.get("translate_key", ""),
                     srt_original,
+                    model=cfg.get("translate_model") or "gpt-3.5-turbo",
                 )
                 zh_path = os.path.join(work_dir, f"{video_id}.zh.srt")
                 with open(zh_path, "w", encoding="utf-8") as f:

@@ -34,9 +34,11 @@ export interface Config {
   // ASR
   asr_api?: string;
   asr_key?: string;
+  asr_model?: string;          // ASR 模型名(如 mimo-v2.5-asr),留空用 Runner 默认值
   // 翻译
   translate_api?: string;
   translate_key?: string;
+  translate_model?: string;   // 翻译模型名(如 gpt-3.5-turbo / auto),留空用 Runner 默认值
   // 通知
   notify_webhook?: string;
   // 标题翻译模板(全局,支持变量 {channel} 频道名、{title} 翻译后标题)

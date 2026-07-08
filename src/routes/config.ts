@@ -23,7 +23,7 @@ app.put('/', async (c) => {
     'yt_api_key', 'yt_cookies',
     'yt_client_id', 'yt_client_secret', 'yt_redirect_uri',  // OAuth 客户端配置(管理员手动填)
     'gh_token', 'gh_repo',
-    'asr_api', 'asr_key', 'translate_api', 'translate_key',
+    'asr_api', 'asr_key', 'asr_model', 'translate_api', 'translate_key', 'translate_model',
     'notify_webhook',
     'title_template',  // 标题翻译模板(非敏感文本,不脱敏不加密)
   ];
