@@ -2,7 +2,8 @@
 # 参考: https://vercel.com/docs/deployments/build-output#vercelignore
 
 # Cloudflare Worker 源码(Vercel 不用)
-src/
+# 用 /src/ 只匹配仓库根目录的 src/,不影响 public/css/src/ 和 public/js/src/
+/src/
 
 # 注意:scripts/ 不能 ignore,因为 package.json 的 postinstall 会跑 scripts/setup.mjs
 # setup.mjs 内部已加 VERCEL=1 检测会自动跳过 wrangler.toml 生成
