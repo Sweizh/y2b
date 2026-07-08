@@ -23,13 +23,12 @@ const BILI_FINGER_SPI = 'https://api.bilibili.com/x/frontend/finger/spi';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// B 站 passport 端点需要的请求头(缺少 Referer/Origin 时可能返回 HTML 错误页)
+// B 站 passport 端点请求头
+// 注意:不能带 Referer/Origin!Worker fetch 带 Referer/Origin 会被 B 站识别为
+// 伪造的浏览器请求(IP/指纹不匹配),返回 -412 "request was banned"。
+// 只带 UA 反而能通(B 站把简单请求当脚本放行)。实测验证 2026-07-08。
 const BILI_PASSPORT_HEADERS: Record<string, string> = {
   'User-Agent': UA,
-  'Referer': 'https://www.bilibili.com/',
-  'Origin': 'https://www.bilibili.com',
-  'Accept': 'application/json, text/plain, */*',
-  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 };
 
 function log(event: string, status: string, extra: Record<string, any> = {}) {
@@ -83,50 +82,6 @@ app.get('/qrcode', async (c) => {
     log('bili_qrcode', 'error', { requestId, error: e.message });
     return c.json({ error: '请求 B 站失败:' + (e.message || e) }, 502);
   }
-});
-
-// 临时调试端点:诊断 Worker fetch 调 B 站为什么 -412
-// 测试多种 fetch 配置,返回每种的结果,定位是请求头/TLS/还是其他问题
-app.get('/debug', async (c) => {
-  const results: any[] = [];
-  const biliUrl = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate?source=main-fe-header';
-
-  // 1. 纯 fetch(无自定义头)
-  try {
-    const r = await fetch(biliUrl);
-    const body = await r.text();
-    results.push({ test: '1_pure_fetch', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
-  } catch (e: any) { results.push({ test: '1_pure_fetch', error: e.message }); }
-
-  // 2. 只带 UA
-  try {
-    const r = await fetch(biliUrl, { headers: { 'User-Agent': UA } });
-    const body = await r.text();
-    results.push({ test: '2_ua_only', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
-  } catch (e: any) { results.push({ test: '2_ua_only', error: e.message }); }
-
-  // 3. 完整头(当前代码风格)
-  try {
-    const r = await fetch(biliUrl, { headers: BILI_PASSPORT_HEADERS });
-    const body = await r.text();
-    results.push({ test: '3_full_headers', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
-  } catch (e: any) { results.push({ test: '3_full_headers', error: e.message }); }
-
-  // 4. 完整头 + redirect follow(而非 manual)
-  try {
-    const r = await fetch(biliUrl, { headers: BILI_PASSPORT_HEADERS, redirect: 'follow' });
-    const body = await r.text();
-    results.push({ test: '4_full_follow', status: r.status, ct: r.headers.get('content-type'), body: body.slice(0, 200) });
-  } catch (e: any) { results.push({ test: '4_full_follow', error: e.message }); }
-
-  // 5. 用 httpbin 看 Worker fetch 实际发出的请求头
-  try {
-    const r = await fetch('https://httpbin.org/headers');
-    const data = await r.json() as any;
-    results.push({ test: '5_echo_headers', workerSentHeaders: data.headers });
-  } catch (e: any) { results.push({ test: '5_echo_headers', error: e.message }); }
-
-  return c.json({ results });
 });
 
 // 获取 buvid3:调 finger/spi 接口拿真实设备指纹
