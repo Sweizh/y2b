@@ -286,8 +286,17 @@
             metaRegion.textContent = region;
             log('META', 'x-vercel-id: ' + region, '');
           }
-          return resp.json().then(function (d) {
-            return { data: d, status: resp.status };
+          // 先读 text 再 JSON.parse,非 JSON 时显示原始内容便于调试
+          return resp.text().then(function (text) {
+            var data;
+            try {
+              data = JSON.parse(text);
+            } catch (e) {
+              log('RAW', 'HTTP ' + resp.status + ' CT=' + (resp.headers.get('content-type') || '?') + ' len=' + text.length, 'err');
+              log('RAW_BODY', text.slice(0, 500), 'err');
+              throw new Error('响应不是 JSON(HTTP ' + resp.status + ', CT=' + (resp.headers.get('content-type') || '?') + ')');
+            }
+            return { data: data, status: resp.status };
           });
         })
         .then(function (r) {
@@ -355,7 +364,15 @@
       pollTimer = setInterval(function () {
         if (!qrcodeKey) return;
         fetch('/bili/qrcode-status?qrcode_key=' + encodeURIComponent(qrcodeKey))
-          .then(function (resp) { return resp.json(); })
+          .then(function (resp) {
+            return resp.text().then(function (text) {
+              try { return JSON.parse(text); }
+              catch (e) {
+                log('POLL_RAW', 'HTTP ' + resp.status + ': ' + text.slice(0, 300), 'err');
+                throw e;
+              }
+            });
+          })
           .then(function (d) {
             if (d.vercelRegion && metaRegion.textContent === '查询中…') {
               metaRegion.textContent = d.vercelRegion;
