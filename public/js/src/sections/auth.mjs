@@ -670,4 +670,20 @@ export function initAuth() {
       }
     });
   }
+
+  // B站手动凭证展开/收起(默认折叠,扫码登录后无需手动填写)
+  var biliManualToggle = document.querySelector('[data-dom-id="bili-manual-toggle"]');
+  var biliManualWrap = document.querySelector('[data-dom-id="bili-manual-wrap"]');
+  if (biliManualToggle && biliManualWrap) {
+    biliManualToggle.addEventListener('click', function () {
+      var isOpen = biliManualWrap.style.display !== 'none';
+      if (isOpen) {
+        biliManualWrap.style.display = 'none';
+        biliManualToggle.textContent = '显示手动凭证 ▾';
+      } else {
+        biliManualWrap.style.display = '';
+        biliManualToggle.textContent = '隐藏手动凭证 ▴';
+      }
+    });
+  }
 }

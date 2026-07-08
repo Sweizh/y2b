@@ -16,7 +16,6 @@ import { getRawConfig, putConfig } from '../kv';
 
 const app = new Hono<{ Bindings: Env }>();
 
-const BILI_NAV_URL = 'https://api.bilibili.com/x/web-interface/nav';
 const BILI_FINGER_SPI = 'https://api.bilibili.com/x/frontend/finger/spi';
 
 // Vercel Edge Function 代理 URL(已验证可绕过 B 站对 Cloudflare Worker IP 的 -412 风控)
@@ -25,6 +24,32 @@ const BILI_FINGER_SPI = 'https://api.bilibili.com/x/frontend/finger/spi';
 const VERCEL_BILI_PROXY = 'https://y2b-six.vercel.app';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// 调 Vercel Edge Function nav 代理,绕过 CF Worker IP 对 api.bilibili.com 的 -412 风控
+// 返回 nav 接口的原始 JSON data(成功)或 null(失败,调用方自行降级)
+async function fetchBiliNavViaVercel(sessdata: string, biliJct: string, buvid3: string, requestId: string): Promise<any | null> {
+  try {
+    const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/nav`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+      body: JSON.stringify({ sessdata, bili_jct: biliJct, buvid3 }),
+    });
+    const ct = resp.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      log('bili_nav_vercel', 'non_json', { requestId, status: resp.status, contentType: ct });
+      return null;
+    }
+    const data = await resp.json() as any;
+    if (data.error) {
+      log('bili_nav_vercel', 'failed', { requestId, error: data.error, status: data.status });
+      return null;
+    }
+    return data.nav || null;
+  } catch (e: any) {
+    log('bili_nav_vercel', 'error', { requestId, error: e.message });
+    return null;
+  }
+}
 
 function log(event: string, status: string, extra: Record<string, any> = {}) {
   console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, status, ...extra }));
@@ -188,18 +213,12 @@ app.post('/check', async (c) => {
       log('bili_check', 'no_creds', { requestId });
       return c.json({ ok: true, valid: false, message: '尚未登录 B 站' });
     }
-    // 调 nav 接口验证(SESSDATA 由后端持有,可安全带 Cookie)
-    const cookie = `SESSDATA=${cfg.bili_sessdata}; bili_jct=${cfg.bili_jct || ''}; buvid3=${cfg.bili_buvid3 || ''}`;
-    const navResp = await fetch(BILI_NAV_URL, {
-      headers: { 'Cookie': cookie, 'User-Agent': UA },
-    });
-    const ct = navResp.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      const preview = (await navResp.text()).slice(0, 120);
-      log('bili_check', 'non_json', { requestId, status: navResp.status, contentType: ct, preview });
-      return c.json({ ok: false, message: `B 站返回非 JSON(status=${navResp.status})` });
+    // 走 Vercel nav 代理绕过 CF Worker IP 风控(api.bilibili.com 也被风控)
+    const navData = await fetchBiliNavViaVercel(cfg.bili_sessdata, cfg.bili_jct || '', cfg.bili_buvid3 || '', requestId);
+    if (!navData) {
+      log('bili_check', 'vercel_failed', { requestId, duration: Date.now() - start });
+      return c.json({ ok: false, message: 'Vercel nav 代理请求失败(详见 Worker 日志)' });
     }
-    const navData = await navResp.json() as any;
     if (navData.code === 0 && navData.data?.isLogin) {
       // 有效:从 SESSDATA 解码 exp 时间(若有 ac_time_value 字段直接用)
       let expiresAt: number | undefined;
@@ -261,28 +280,16 @@ app.post('/cookie', async (c) => {
       log('bili_cookie_buvid3', 'fallback', { requestId, source });
     }
     // 调 nav 接口验证 cookie + 取 uname
-    // 注意: nav 接口(api.bilibili.com)可能也被风控,验证失败不阻断流程
-    // 实际有效性由 Runner 在 GitHub Actions 中调上传接口时验证
+    // 走 Vercel nav 代理绕过 CF Worker IP 风控(api.bilibili.com 也被风控)
     let uname = '';
     let navVerified = false;
     try {
-      const navResp = await fetch(BILI_NAV_URL, {
-        headers: {
-          'Cookie': `SESSDATA=${sessdata}; bili_jct=${biliJct}; buvid3=${finalBuvid3}`,
-          'User-Agent': UA,
-        },
-      });
-      const ct = navResp.headers.get('content-type') || '';
-      if (ct.includes('application/json')) {
-        const navData = await navResp.json() as any;
-        if (navData.code === 0 && navData.data?.isLogin) {
-          uname = navData.data.uname || '';
-          navVerified = true;
-        } else {
-          log('bili_cookie_nav', 'warning', { requestId, code: navData.code, message: navData.message });
-        }
-      } else {
-        log('bili_cookie_nav', 'warning', { requestId, status: navResp.status, contentType: ct });
+      const navData = await fetchBiliNavViaVercel(sessdata, biliJct, finalBuvid3, requestId);
+      if (navData && navData.code === 0 && navData.data?.isLogin) {
+        uname = navData.data.uname || '';
+        navVerified = true;
+      } else if (navData) {
+        log('bili_cookie_nav', 'warning', { requestId, code: navData.code, message: navData.message });
       }
     } catch (e: any) {
       log('bili_cookie_nav', 'error', { requestId, error: e.message });
@@ -363,20 +370,17 @@ async function parseBiliLoginCookies(
     }
 
     // 调 nav 接口拿账号名 + 校验登录是否真成功
+    // 走 Vercel nav 代理绕过 CF Worker IP 风控(api.bilibili.com 也被风控)
     let uname = '';
     try {
-      const navResp = await fetch(BILI_NAV_URL, {
-        headers: {
-          'Cookie': `SESSDATA=${sessdata}; bili_jct=${biliJct}; buvid3=${buvid3}`,
-          'User-Agent': UA,
-        },
-      });
-      const navData = await navResp.json() as any;
-      if (navData.code === 0 && navData.data?.isLogin) {
+      const navData = await fetchBiliNavViaVercel(sessdata, biliJct, buvid3, requestId);
+      if (navData && navData.code === 0 && navData.data?.isLogin) {
         uname = navData.data.uname || '';
-      } else {
-        // nav 接口未确认登录,但 cookie 已拿到。仍写入,但警告
+      } else if (navData) {
         log('bili_nav', 'warning', { requestId, code: navData.code, message: navData.message });
+      } else {
+        // Vercel 代理失败,但 cookie 已拿到。仍写入,但警告
+        log('bili_nav', 'warning', { requestId, error: 'Vercel nav 代理失败' });
       }
     } catch (e) {
       log('bili_nav', 'warning', { requestId, error: (e as Error).message });

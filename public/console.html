@@ -149,39 +149,41 @@
             </div>
           </div>
 
-          <!-- B站 SESSDATA -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-bili-sessdata" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 SESSDATA</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
-            </div>
+          <!-- B站手动凭证(已自动登录,默认折叠;点"显示手动凭证"展开用于调试) -->
+          <div class="md:col-span-2">
+            <button type="button" data-dom-id="bili-manual-toggle" class="text-xs underline transition-colors duration-150" style="color:var(--apple-muted-foreground);background:none;border:none;cursor:pointer;padding:0">显示手动凭证 ▾</button>
           </div>
-
-          <!-- B站 bili_jct -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-bili-jct" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 bili_jct</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+          <div data-dom-id="bili-manual-wrap" class="contents" style="display:none">
+            <!-- B站 SESSDATA -->
+            <div class="flex flex-col gap-1.5">
+              <label for="fld-bili-sessdata" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 SESSDATA</label>
+              <div class="flex items-center gap-2">
+                <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              </div>
             </div>
-          </div>
 
-          <!-- B站 buvid3 -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-bili-buvid3" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 buvid3</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+            <!-- B站 bili_jct -->
+            <div class="flex flex-col gap-1.5">
+              <label for="fld-bili-jct" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 bili_jct</label>
+              <div class="flex items-center gap-2">
+                <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              </div>
             </div>
-          </div>
 
-          <!-- B站 ac_time_value -->
-          <div class="flex flex-col gap-1.5">
-            <label for="fld-bili-ac-time-value" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 ac_time_value</label>
-            <div class="flex items-center gap-2">
-              <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
-              <button class="h-9 px-3 rounded-lg text-xs font-medium shrink-0 transition-colors duration-150" style="background:var(--apple-secondary);color:var(--apple-secondary-foreground)">测试</button>
+            <!-- B站 buvid3 -->
+            <div class="flex flex-col gap-1.5">
+              <label for="fld-bili-buvid3" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 buvid3</label>
+              <div class="flex items-center gap-2">
+                <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              </div>
+            </div>
+
+            <!-- B站 ac_time_value -->
+            <div class="flex flex-col gap-1.5">
+              <label for="fld-bili-ac-time-value" class="text-xs font-medium" style="color:var(--apple-muted-foreground)">B站 ac_time_value</label>
+              <div class="flex items-center gap-2">
+                <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="flex-1 h-9 px-3 rounded-lg text-sm font-mono" style="background:var(--apple-background);border:1px solid var(--apple-input);color:var(--apple-foreground)">
+              </div>
             </div>
           </div>
 
