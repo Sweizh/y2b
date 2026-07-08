@@ -102,19 +102,19 @@
           <span>显示手动凭证</span>
         </button>
         <div data-dom-id="bili-manual-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" style="display:none">
-          <div>
+          <div class="flex flex-col">
             <label for="fld-bili-sessdata" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 SESSDATA</label>
             <input id="fld-bili-sessdata" type="password" value="" placeholder="未设置" readonly class="input-base">
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-bili-jct" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 bili_jct</label>
             <input id="fld-bili-jct" type="password" value="" placeholder="未设置" readonly class="input-base">
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-bili-buvid3" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 buvid3</label>
             <input id="fld-bili-buvid3" type="password" value="" placeholder="未设置" readonly class="input-base">
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-bili-ac-time-value" class="text-xs mb-1 block" style="color:var(--muted-foreground)">B站 ac_time_value</label>
             <input id="fld-bili-ac-time-value" type="password" value="" placeholder="未设置" readonly class="input-base">
           </div>
@@ -153,15 +153,15 @@
           <span>OAuth 配置</span>
         </button>
         <div data-dom-id="yt-oauth-config-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" style="display:none">
-          <div>
+          <div class="flex flex-col">
             <label for="fld-yt-oauth-client-id" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube OAuth Client ID</label>
             <input id="fld-yt-oauth-client-id" type="text" value="" placeholder="未设置" class="input-base">
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-yt-oauth-client-secret" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube OAuth Client Secret</label>
             <input id="fld-yt-oauth-client-secret" type="password" value="" placeholder="未设置" class="input-base">
           </div>
-          <div class="md:col-span-2">
+          <div class="md:col-span-2 flex flex-col">
             <label for="fld-yt-oauth-redirect-uri" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube OAuth Redirect URI</label>
             <input id="fld-yt-oauth-redirect-uri" type="text" value="" placeholder="未设置" class="input-base">
           </div>
@@ -171,25 +171,28 @@
       <!-- YouTube API Key / Cookie / GitHub Token + 仓库 -->
       <div class="surface-card p-5 space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+          <div class="flex flex-col">
             <label for="fld-yt-api-key" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube API Key</label>
             <input id="fld-yt-api-key" type="text" value="" placeholder="未设置" readonly class="input-base">
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-github-repo" class="text-xs mb-1 block" style="color:var(--muted-foreground)">GitHub 仓库</label>
             <input id="fld-github-repo" type="text" value="" placeholder="如 Sweizh/y2b" readonly class="input-base">
           </div>
         </div>
-        <div>
+        <div class="flex flex-col">
           <label for="fld-yt-cookie" class="text-xs mb-1 block" style="color:var(--muted-foreground)">YouTube Cookie</label>
           <textarea id="fld-yt-cookie" rows="2" readonly placeholder="未设置" class="input-base" style="height:auto;padding:10px 12px;resize:none;font-size:11px;"></textarea>
         </div>
-        <div>
+        <div class="flex flex-col">
           <label for="fld-github-token" class="text-xs mb-1 block" style="color:var(--muted-foreground)">GitHub Token</label>
           <div class="flex items-center gap-2">
             <input id="fld-github-token" type="password" value="" placeholder="未设置" readonly class="input-base">
             <button class="btn-ghost btn-xs shrink-0">测试</button>
           </div>
+        </div>
+        <div class="flex justify-end">
+          <button data-dom-id="yt-cred-save-btn" class="btn-accent">保存</button>
         </div>
       </div>
 
@@ -223,35 +226,35 @@
       <div class="surface-card p-5 space-y-4">
         <h2 class="text-base font-medium">AI 服务接口</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+          <div class="flex flex-col">
             <label for="fld-asr-api-url" class="text-xs mb-1 block" style="color:var(--muted-foreground)">语音识别 API 地址</label>
             <div class="flex items-center gap-2">
               <input id="fld-asr-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
               <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-asr-api-key" class="text-xs mb-1 block" style="color:var(--muted-foreground)">语音识别 API 密钥</label>
             <div class="flex items-center gap-2">
               <input id="fld-asr-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
               <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-translate-api-url" class="text-xs mb-1 block" style="color:var(--muted-foreground)">翻译 API 地址</label>
             <div class="flex items-center gap-2">
               <input id="fld-translate-api-url" type="text" value="" placeholder="未设置" readonly class="input-base" style="font-size:11px;">
               <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-          <div>
+          <div class="flex flex-col">
             <label for="fld-translate-api-key" class="text-xs mb-1 block" style="color:var(--muted-foreground)">翻译 API 密钥</label>
             <div class="flex items-center gap-2">
               <input id="fld-translate-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
               <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
           </div>
-          <div class="md:col-span-2">
+          <div class="md:col-span-2 flex flex-col">
             <label for="fld-title-template" class="text-xs mb-1 block" style="color:var(--muted-foreground)">标题翻译模板</label>
             <input id="fld-title-template" type="text" data-field="title_template" value="" placeholder="支持变量: {channel}、{title}" readonly class="input-base" style="font-size:11px;">
           </div>

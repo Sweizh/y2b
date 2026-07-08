@@ -126,6 +126,17 @@ export function getHelpText(key) {
   return helpTexts[key] || null;
 }
 
+// 重组后凭证字段分布在两个 section:B 站凭证在 #section-credentials,
+// YouTube/GitHub 凭证在 #section-channels。返回存在的 section 数组。
+function getCredSections() {
+  var arr = [];
+  var c = document.getElementById('section-credentials');
+  if (c) arr.push(c);
+  var ch = document.getElementById('section-channels');
+  if (ch) arr.push(ch);
+  return arr;
+}
+
 /**
  * Inject a "获取方式" help button next to each label whose text is in fieldMap.
  * Faithful to console.html lines 1076-1094 (wraps label + button in a flex div).
@@ -163,9 +174,12 @@ function injectHelpButtons(section, fieldMap) {
  * @param {object} cfg
  */
 function populateCredentials(cfg) {
-  var credSection = document.getElementById('section-credentials');
-  if (!credSection) return;
-  var inputs = credSection.querySelectorAll('input,textarea');
+  var sections = getCredSections();
+  if (sections.length === 0) return;
+  var inputs = [];
+  sections.forEach(function (s) {
+    Array.prototype.push.apply(inputs, Array.from(s.querySelectorAll('input,textarea')));
+  });
   inputs.forEach(function (inp) {
     var lbl = inp.closest('.flex.flex-col');
     if (!lbl) return;
@@ -177,7 +191,8 @@ function populateCredentials(cfg) {
     }
   });
   // 管理密码只读状态(用 initialized 作为代理)
-  var pwdStatus = credSection.querySelector('[data-dom-id="admin-password-status"]');
+  // (admin-password-status 在 #section-credentials)
+  var pwdStatus = document.querySelector('[data-dom-id="admin-password-status"]');
   if (pwdStatus) {
     if (cfg.initialized) {
       pwdStatus.textContent = '已设置';
@@ -187,8 +202,8 @@ function populateCredentials(cfg) {
       pwdStatus.style.color = 'var(--apple-muted-foreground)';
     }
   }
-  // B 站扫码登录状态显示
-  var biliStatus = credSection.querySelector('[data-dom-id="bili-login-status"]');
+  // B 站扫码登录状态显示(bili-login-status 在 #section-credentials)
+  var biliStatus = document.querySelector('[data-dom-id="bili-login-status"]');
   if (biliStatus) {
     if (cfg.bili_login_at && cfg.bili_login_at > 0) {
       var biliDt = new Date(cfg.bili_login_at);
@@ -200,8 +215,8 @@ function populateCredentials(cfg) {
       biliStatus.style.color = 'var(--apple-muted-foreground)';
     }
   }
-  // YouTube OAuth 登录状态显示
-  var ytStatus = credSection.querySelector('[data-dom-id="yt-login-status"]');
+  // YouTube OAuth 登录状态显示(yt-login-status 在 #section-channels)
+  var ytStatus = document.querySelector('[data-dom-id="yt-login-status"]');
   if (ytStatus) {
     if (cfg.yt_user_email) {
       ytStatus.textContent = '已登录(email: ' + cfg.yt_user_email + ')';
@@ -236,42 +251,60 @@ function findTestButton(div) {
  * @returns {{refresh:Function, resnapshot:Function}|null}
  */
 function setupCredentialsSave() {
-  var credSection = document.getElementById('section-credentials');
-  if (!credSection) return null;
-  var save = credSection.querySelector('[data-dom-id="credentials-save-btn"]');
-  if (!save) {
-    // 回退:查找文本为「保存」的按钮
-    credSection.querySelectorAll('button').forEach(function (b) {
-      if (b.textContent.trim() === '保存') save = b;
-    });
-  }
-  if (!save) return null;
-  // 让 readonly 输入可编辑 + 脱敏字段聚焦时全选
-  credSection.querySelectorAll('input[readonly],textarea[readonly]').forEach(function (inp) {
-    inp.removeAttribute('readonly');
-    inp.addEventListener('focus', function () {
-      if (this.value && this.value.indexOf('****') >= 0) this.select();
+  var sections = getCredSections();
+  if (sections.length === 0) return null;
+  var credSection = sections[0]; // 保留 credSection 变量(主 section,历史代码引用)
+  // 保存按钮查找:先在 #section-credentials 找 credentials-save-btn,
+  // 再在 #section-channels 找 yt-cred-save-btn。返回按钮数组,共享同一保存逻辑。
+  var saveBtns = [];
+  sections.forEach(function (s) {
+    var b = s.querySelector('[data-dom-id="credentials-save-btn"], [data-dom-id="yt-cred-save-btn"]');
+    if (b) saveBtns.push(b);
+    else {
+      // 回退:文本为「保存」的按钮
+      s.querySelectorAll('button').forEach(function (btn) {
+        if (btn.textContent.trim() === '保存') saveBtns.push(btn);
+      });
+    }
+  });
+  if (saveBtns.length === 0) return null;
+  var save = saveBtns[0]; // 主保存按钮(setBtnLoading / dirty-check 用)
+  // 让 readonly 输入可编辑 + 脱敏字段聚焦时全选(遍历所有 sections)
+  sections.forEach(function (s) {
+    s.querySelectorAll('input[readonly],textarea[readonly]').forEach(function (inp) {
+      inp.removeAttribute('readonly');
+      inp.addEventListener('focus', function () {
+        if (this.value && this.value.indexOf('****') >= 0) this.select();
+      });
     });
   });
-  var fields = Array.from(credSection.querySelectorAll('input,textarea'));
+  // fields 收集(脏值检测):遍历所有 sections
+  var fields = [];
+  sections.forEach(function (s) {
+    Array.prototype.push.apply(fields, Array.from(s.querySelectorAll('input,textarea')));
+  });
   var dirty = setupDirtyCheck(fields, save);
-  save.addEventListener('click', function () {
+  // 保存逻辑:遍历所有 sections 的 .flex.flex-col 收集 body;
+  // 所有 saveBtns 都绑定 click(共享同一 handler doSave)。
+  function doSave() {
     if (save.disabled) return;
-    setBtnLoading(save, true, '保存中…');
+    saveBtns.forEach(function (b) { setBtnLoading(b, true, '保存中…'); });
     var body = {};
-    credSection.querySelectorAll('.flex.flex-col').forEach(function (div) {
-      var lbl = div.querySelector('label');
-      if (!lbl) return;
-      var inp = div.querySelector('input,textarea');
-      if (!inp) return;
-      var key = credFieldMap[lbl.textContent.trim()];
-      if (key && inp.value && !inp.value.includes('****')) {
-        body[key] = inp.value;
-      }
+    sections.forEach(function (s) {
+      s.querySelectorAll('.flex.flex-col').forEach(function (div) {
+        var lbl = div.querySelector('label');
+        if (!lbl) return;
+        var inp = div.querySelector('input,textarea');
+        if (!inp) return;
+        var key = credFieldMap[lbl.textContent.trim()];
+        if (key && inp.value && !inp.value.includes('****')) {
+          body[key] = inp.value;
+        }
+      });
     });
     apiPost('/api/config', body, { method: 'PUT' })
       .then(function (d) {
-        setBtnLoading(save, false);
+        saveBtns.forEach(function (b) { setBtnLoading(b, false); });
         if (d.error) {
           showToast(d.error, 'error');
         } else {
@@ -280,10 +313,11 @@ function setupCredentialsSave() {
         }
       })
       .catch(function (e) {
-        setBtnLoading(save, false);
+        saveBtns.forEach(function (b) { setBtnLoading(b, false); });
         showToast('网络错误：' + (e.message || e), 'error');
       });
-  });
+  }
+  saveBtns.forEach(function (b) { b.addEventListener('click', doSave); });
   dirty.refresh();
   return dirty;
 }
@@ -295,48 +329,50 @@ function setupCredentialsSave() {
  * Faithful to console.html bindTestButtons() (lines 1461-1510).
  */
 function bindCredentialsTestButtons() {
-  var credSection = document.getElementById('section-credentials');
-  if (!credSection) return;
+  var sections = getCredSections();
+  if (sections.length === 0) return;
   var biliSessdataFields = ['B站 SESSDATA'];
   var biliInfoFields = ['B站 bili_jct', 'B站 buvid3', 'B站 ac_time_value'];
   var githubFields = ['GitHub Token'];
-  credSection.querySelectorAll('.flex.flex-col').forEach(function (div) {
-    var lbl = div.querySelector('label');
-    if (!lbl) return;
-    var btn = findTestButton(div);
-    if (!btn) return;
-    var lblText = lbl.textContent.trim();
-    // label 末尾可能有「获取方式」按钮文本,只取主文本
-    var mainText = lblText.split('获取方式')[0].trim();
-    var endpoint = '';
-    if (biliSessdataFields.indexOf(mainText) >= 0) endpoint = '/api/test/bili';
-    else if (githubFields.indexOf(mainText) >= 0) endpoint = '/api/test/github';
-    if (endpoint) {
-      btn.addEventListener('click', function () {
-        setBtnLoading(btn, true, '测试中…');
-        apiFetch(endpoint, { method: 'POST' })
-          .then(function (d) {
-            setBtnLoading(btn, false);
-            showToast(d.message || (d.success ? '测试成功' : '测试失败'), d.success ? 'success' : 'error');
-          })
-          .catch(function (e) {
-            setBtnLoading(btn, false);
-            showToast('测试失败：' + (e.message || e), 'error');
-          });
-      });
-    } else if (biliInfoFields.indexOf(mainText) >= 0) {
-      // B 站其他字段随 SESSDATA 一起校验,改为 info 图标按钮
-      btn.textContent = 'info';
-      btn.title = '该字段随 SESSDATA 一起校验,无需单独测试';
-      btn.addEventListener('click', function () {
-        showToast('该字段随 SESSDATA 一起校验,无需单独测试', 'info');
-      });
-    } else if (mainText.indexOf('YouTube API Key') >= 0) {
-      // YouTube API Key 无独立测试端点
-      btn.addEventListener('click', function () {
-        showToast('该字段无独立测试端点,请保存后在实际运行中验证', 'info');
-      });
-    }
+  sections.forEach(function (credSection) {
+    credSection.querySelectorAll('.flex.flex-col').forEach(function (div) {
+      var lbl = div.querySelector('label');
+      if (!lbl) return;
+      var btn = findTestButton(div);
+      if (!btn) return;
+      var lblText = lbl.textContent.trim();
+      // label 末尾可能有「获取方式」按钮文本,只取主文本
+      var mainText = lblText.split('获取方式')[0].trim();
+      var endpoint = '';
+      if (biliSessdataFields.indexOf(mainText) >= 0) endpoint = '/api/test/bili';
+      else if (githubFields.indexOf(mainText) >= 0) endpoint = '/api/test/github';
+      if (endpoint) {
+        btn.addEventListener('click', function () {
+          setBtnLoading(btn, true, '测试中…');
+          apiFetch(endpoint, { method: 'POST' })
+            .then(function (d) {
+              setBtnLoading(btn, false);
+              showToast(d.message || (d.success ? '测试成功' : '测试失败'), d.success ? 'success' : 'error');
+            })
+            .catch(function (e) {
+              setBtnLoading(btn, false);
+              showToast('测试失败：' + (e.message || e), 'error');
+            });
+        });
+      } else if (biliInfoFields.indexOf(mainText) >= 0) {
+        // B 站其他字段随 SESSDATA 一起校验,改为 info 图标按钮
+        btn.textContent = 'info';
+        btn.title = '该字段随 SESSDATA 一起校验,无需单独测试';
+        btn.addEventListener('click', function () {
+          showToast('该字段随 SESSDATA 一起校验,无需单独测试', 'info');
+        });
+      } else if (mainText.indexOf('YouTube API Key') >= 0) {
+        // YouTube API Key 无独立测试端点
+        btn.addEventListener('click', function () {
+          showToast('该字段无独立测试端点,请保存后在实际运行中验证', 'info');
+        });
+      }
+    });
   });
 }
 
@@ -346,9 +382,9 @@ function bindCredentialsTestButtons() {
  * empty fields) → test-button binding → async config load → populate → resnapshot.
  */
 export function initCredentials() {
-  var credSection = document.getElementById('section-credentials');
-  if (!credSection) return;
-  injectHelpButtons(credSection, credFieldMap);
+  var sections = getCredSections();
+  if (sections.length === 0) return;
+  sections.forEach(function (s) { injectHelpButtons(s, credFieldMap); });
   var saveCtx = setupCredentialsSave();
   bindCredentialsTestButtons();
   loadConfig()
