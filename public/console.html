@@ -2509,8 +2509,8 @@ body{margin:0;padding:12px;background:var(--background);color:var(--foreground);
   }
 
   // ===== B 站弹窗登录(用户侧浏览器登录 + 从 Network 面板复制 cookie 回传) =====
-  // 为什么用这个方案: B 站 passport 端点对 Cloudflare Worker IP 严格风控,
-  // Worker 代理 QR 登录会被 ban(code -412),只能让用户浏览器直接登录 B 站
+  // 备选方案:扫码登录(/api/bili/login/qrcode)修复后优先用扫码;
+  // 此弹窗登录作为备选,适合高级用户或不便扫码的场景。
   // 为什么不从 Console 复制 document.cookie: SESSDATA 是 HttpOnly,
   //   document.cookie 读不到 SESSDATA,只能拿到 bili_jct 等非 HttpOnly 字段
   // 改用从 Network 面板复制请求头 cookie: 请求头会包含完整 cookie(含 HttpOnly)
