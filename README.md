@@ -27,7 +27,7 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 | Web 框架 | Hono |
 | 密码哈希 | bcryptjs |
 | 加密 | Web Crypto API (AES-GCM, SHA-256 派生密钥) |
-| 前端 | 原生 HTML + Tailwind CSS v4 (CDN) + Lucide Icons |
+| 前端 | 原生 ES 模块 + Tailwind v4 CLI 预编译 + ESBuild + Lucide Icons(oklch 纯灰阶 + Geist 字体 + shadcn 风格,无 CDN 运行时) |
 | CI/CD | GitHub Actions (`repository_dispatch` 触发) |
 | Runner | Python 3.11 + yt-dlp + ffmpeg + bilibili-api-python |
 | 部署 | wrangler / Cloudflare Dashboard Git 集成 |
@@ -55,11 +55,30 @@ YouTube 到 Bilibili 自动化搬运系统的 Web 管理后台。基于 Cloudfla
 │       └── pipeline.ts       # /api/pipeline/{config,processed,status,cookies}（Bearer Token）
 ├── public/
 │   ├── index.html            # 入口，自动跳转登录页或控制台
-│   ├── login.html            # 登录页
-│   └── console.html          # 控制台（含已处理视频列表 + 失败通知配置）
+│   ├── login.html            # 登录页(shadcn 风格居中卡片)
+│   ├── console.html          # 控制台(顶部 nav 4 视图:B 站/YouTube/通用/运行状态 + Ctrl+K)
+│   ├── css/
+│   │   ├── src/              # 设计令牌 + 组件样式源(构建输入)
+│   │   │   ├── tokens.css    # oklch 纯灰阶 + Geist 字体 + 旧别名向后兼容
+│   │   │   └── app.css       # shadcn 风格组件类(tab/switch/collapsible/command-palette/top-nav)
+│   │   └── dist/             # 构建产物(入库,由 npm run build:frontend 生成)
+│   │       └── app.css       # 预编译 Tailwind v4 CSS(消除首屏 FOUC)
+│   └── js/
+│       ├── src/              # ES 模块源码(构建输入)
+│       │   ├── console.mjs   # 控制台入口(视图切换 + Ctrl+K + 移动端 hamburger + tab 切换)
+│       │   ├── login.mjs     # 登录页入口(初始化/登录模式切换)
+│       │   ├── theme.mjs     # 主题切换(localStorage['y2b-theme'] + prefers-color-scheme)
+│       │   ├── api.mjs       # fetch 封装(credentials + JSON 解析 + 401 重定向)
+│       │   ├── utils.mjs     # escapeHtml / formatTime / 脏值检测
+│       │   ├── components/   # toast / modal(focus trap) / button / section-nav
+│       │   └── sections/     # credentials / ai-services / channels / status / manual / auth
+│       └── dist/             # 构建产物(入库,ESBuild bundle)
+│           ├── console.js
+│           └── login.js
 ├── scripts/
 │   ├── main.py               # Python Runner 主流程(下载→转写→翻译→上传→回写)
 │   ├── setup.mjs             # 从 .dev.vars/环境变量生成本地 wrangler.toml
+│   ├── build-frontend.mjs    # 前端构建入口(tailwindcss CLI + esbuild)
 │   └── requirements.txt      # yt-dlp / bilibili-api-python / requests
 ├── .github/
 │   └── workflows/
@@ -83,9 +102,16 @@ npm run dev
 # 访问 http://localhost:8787
 # 首次访问会进入初始化页面，设置管理密码
 
+# 修改前端源码(public/css/src、public/js/src)后重新构建产物
+npm run build:frontend
+# 产出 public/css/dist/app.css + public/js/dist/{console,login}.js
+# wrangler dev 会直接读取这些构建产物,改完前端源码需手动跑一次
+
 # 实时查看生产日志（部署后）
 npm run tail
 ```
+
+> 前端已从 CDN 运行时编译迁移到预编译:修改 `public/css/src/*.css` 或 `public/js/src/*.mjs` 后必须 `npm run build:frontend` 才能看到效果。`npm run deploy` 已内嵌该步骤。
 
 `.dev.vars` 文件示例（首次使用 `cp .dev.vars.example .dev.vars` 创建）：
 
@@ -147,9 +173,9 @@ npm run deploy
 4. 授权并选择 GitHub 仓库 `Sweizh/y2b`
 5. 配置:
    - Production branch: `main`
-   - Build command: `npm install`
+   - Build command: `npm install && npm run build:frontend`
    - Deploy command: `npx wrangler deploy`
-6. 保存后,每次 push 到 `main` 分支自动部署
+6. 保存后,每次 push 到 `main` 分支自动部署(Cloudflare Builds 会先跑前端构建再 deploy)
 7. 在 Worker → Settings → Variables 中配置以下变量(构建时 + 运行时都会用到):
    - `CLOUDFLARE_KV_ID` = 你的 KV 命名空间 ID(明文,构建时供 setup.mjs 读取)
    - `CLOUDFLARE_KV_PREVIEW_ID` = 你的 KV 预览 ID(可与上面相同)
@@ -277,6 +303,7 @@ npm run setup                    # 重新生成 wrangler.toml(读取 .dev.vars)
 
 # 4. 本地启动
 npm run dev                      # http://localhost:8787
+# 注:若改了 public/css/src 或 public/js/src,需先 npm run build:frontend 再 dev
 
 # 5. 首次访问设置管理密码,记录 pipeline_token
 
