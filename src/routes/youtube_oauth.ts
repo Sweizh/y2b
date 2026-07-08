@@ -372,4 +372,70 @@ function parseSetCookie(sc: string): {
   return { name, value, domain, path, secure, expires };
 }
 
+// 检测 YouTube OAuth 登录态:调用 refreshYouTubeAccessToken 测试 refresh_token 是否仍可换 access_token
+// 返回 { ok, valid, email?, expires_at?, refreshed?, message? }
+//   - ok=false     网络/服务器错误
+//   - ok=true,valid=true    refresh_token 仍有效(可能用旧 access_token,也可能刷新成功)
+//   - ok=true,valid=false   refresh_token 失效(用户在 Google 账号撤销了授权)
+app.post('/check', async (c) => {
+  const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  const start = Date.now();
+  try {
+    const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
+    if (!cfg.yt_refresh_token) {
+      return c.json({ ok: true, valid: false, message: '尚未 OAuth 登录 YouTube' });
+    }
+    // 强制刷新以验证 refresh_token 是否仍有效
+    // 做法:把 yt_token_expires_at 设为 0(强制过期),让 refreshYouTubeAccessToken 走刷新分支
+    if (cfg.yt_token_expires_at && cfg.yt_token_expires_at > Date.now() + 5 * 60 * 1000) {
+      // 当前 token 还有效,直接判定为有效(不强制刷新,减少 Google API 调用)
+      return c.json({
+        ok: true,
+        valid: true,
+        email: cfg.yt_user_email || '',
+        expires_at: cfg.yt_token_expires_at,
+        refreshed: false,
+        message: 'YouTube OAuth 登录态有效',
+      });
+    }
+    // 调 refresh,如果 refresh_token 失效会返回 error
+    const r = await refreshYouTubeAccessToken(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '', requestId);
+    if (r.ok) {
+      // 刷新成功 → refresh_token 仍有效
+      return c.json({
+        ok: true,
+        valid: true,
+        email: cfg.yt_user_email || '',
+        expires_at: r.expires_at,
+        refreshed: r.refreshed,
+        message: 'YouTube OAuth 登录态有效' + (r.refreshed ? '(已自动刷新 access_token)' : ''),
+      });
+    }
+    // 刷新失败 → refresh_token 失效
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: 'yt_oauth_check',
+      status: 'invalid',
+      requestId,
+      error: r.error,
+      duration: Date.now() - start,
+    }));
+    return c.json({
+      ok: true,
+      valid: false,
+      message: 'YouTube OAuth 登录已失效(' + (r.error || 'refresh_token 无效') + '),请重新登录',
+    });
+  } catch (e: any) {
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: 'yt_oauth_check',
+      status: 'error',
+      requestId,
+      error: e.message,
+      duration: Date.now() - start,
+    }));
+    return c.json({ ok: false, message: '检测请求失败: ' + (e.message || e) });
+  }
+});
+
 export default app;

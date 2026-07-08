@@ -180,6 +180,59 @@ app.post('/logout', async (c) => {
   return c.json({ success: true });
 });
 
+// 检测 B 站登录态:用 KV 中已存的 SESSDATA 调 nav 接口,确认是否仍有效
+// 返回 { ok, valid, uname?, expires_at?, message? }
+//   - ok=false     网络/服务器错误(无法判断)
+//   - ok=true,valid=true    cookie 有效
+//   - ok=true,valid=false   cookie 已失效(-101 未登录 / -352 风控 / 网络异常)
+app.post('/check', async (c) => {
+  const requestId = getRequestId(c);
+  const start = Date.now();
+  try {
+    const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
+    if (!cfg.bili_sessdata) {
+      log('bili_check', 'no_creds', { requestId });
+      return c.json({ ok: true, valid: false, message: '尚未登录 B 站' });
+    }
+    // 调 nav 接口验证(SESSDATA 由后端持有,可安全带 Cookie)
+    const cookie = `SESSDATA=${cfg.bili_sessdata}; bili_jct=${cfg.bili_jct || ''}; buvid3=${cfg.bili_buvid3 || ''}`;
+    const navResp = await fetch(BILI_NAV_URL, {
+      headers: { 'Cookie': cookie, 'User-Agent': UA },
+    });
+    const ct = navResp.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      const preview = (await navResp.text()).slice(0, 120);
+      log('bili_check', 'non_json', { requestId, status: navResp.status, contentType: ct, preview });
+      return c.json({ ok: false, message: `B 站返回非 JSON(status=${navResp.status})` });
+    }
+    const navData = await navResp.json() as any;
+    if (navData.code === 0 && navData.data?.isLogin) {
+      // 有效:从 SESSDATA 解码 exp 时间(若有 ac_time_value 字段直接用)
+      let expiresAt: number | undefined;
+      const acTime = Number(cfg.ac_time_value);
+      if (acTime && acTime > 0) expiresAt = acTime * 1000;
+      log('bili_check', 'valid', { requestId, uname: navData.data.uname, expiresAt, duration: Date.now() - start });
+      return c.json({
+        ok: true,
+        valid: true,
+        uname: navData.data.uname || cfg.bili_uname || '',
+        expires_at: expiresAt,
+        message: 'B 站登录态有效',
+      });
+    }
+    // 失效:典型 -101 (账号未登录) / -352 (风控) / -412 (被 ban)
+    log('bili_check', 'invalid', { requestId, code: navData.code, message: navData.message });
+    return c.json({
+      ok: true,
+      valid: false,
+      message: 'B 站登录已失效' + (navData.message ? '(' + navData.message + ')' : ''),
+    });
+  } catch (e: any) {
+    log('bili_check', 'error', { requestId, error: e.message });
+    return c.json({ ok: false, message: '检测请求失败: ' + (e.message || e) });
+  }
+});
+
 // 用户侧浏览器弹窗登录后提交 cookie(绕过 Worker IP 风控的唯一可行方案)
 // 流程:
 //   1. 前端弹窗打开 https://passport.bilibili.com/login,用户在浏览器中正常登录

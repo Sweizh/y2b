@@ -468,6 +468,118 @@ export function openChangePasswordModal() {
  *   2. probe GET /api/config — 401 (handled by apiSafeJson) → login.html
  *   3. backend unavailable → swallow (dev mode shows static page)
  */
+/**
+ * 格式化"距过期还剩多久":返回相对描述(如"约 28 天" / "约 6 小时" / "已过期")
+ * @param {number} expiresAt  过期时间戳(ms)
+ * @returns {string}
+ */
+function formatExpiresIn(expiresAt) {
+  if (!expiresAt || expiresAt <= 0) return '';
+  var remainMs = expiresAt - Date.now();
+  if (remainMs <= 0) return '已过期';
+  var days = Math.floor(remainMs / 86400000);
+  var hours = Math.floor((remainMs % 86400000) / 3600000);
+  if (days > 0) return '剩余约 ' + days + ' 天' + (hours > 0 ? ' ' + hours + ' 小时' : '');
+  if (hours > 0) return '剩余约 ' + hours + ' 小时';
+  var mins = Math.floor(remainMs / 60000);
+  if (mins > 0) return '剩余约 ' + mins + ' 分钟';
+  return '即将过期';
+}
+
+/**
+ * 检测 B 站登录态:调用 POST /api/bili/login/check,根据返回更新 status 文案和颜色
+ * 流程:
+ *   1. 按钮进入 loading(文案「检测中…」)
+ *   2. 调后端 /check,后端用 KV 中已存的 SESSDATA 调 B 站 nav 接口
+ *   3. 根据返回结果展示:
+ *      - ok && valid  → 绿色「✓ 有效(账号: xxx, 剩余约 N 天)」
+ *      - ok && !valid → 红色「✕ 已失效(请重新扫码登录)」
+ *      - !ok          → 黄色「⚠ 检测失败:{message}」
+ */
+export function detectBiliLogin() {
+  var btn = document.querySelector('[data-dom-id="bili-check-btn"]');
+  var statusEl = document.querySelector('[data-dom-id="bili-login-status"]');
+  if (!btn || !statusEl) return;
+  if (btn.disabled) return;  // 防止重复点击
+
+  setBtnLoading(btn, true, '检测中…');
+  statusEl.textContent = '正在检测…';
+  statusEl.style.color = 'var(--apple-muted-foreground)';
+
+  apiPost('/api/bili/login/check', {})
+    .then(function (d) {
+      if (d.ok && d.valid) {
+        var text = '✓ 有效(账号: ' + (d.uname || '(未知)') + ')';
+        var expireDesc = formatExpiresIn(d.expires_at);
+        if (expireDesc && expireDesc !== '已过期') text += ', ' + expireDesc;
+        else if (expireDesc === '已过期') text += '(cookie 显示已过期但仍可用)';
+        statusEl.textContent = text;
+        statusEl.style.color = 'var(--state-success)';
+        showToast('B 站登录态有效', 'success');
+      } else if (d.ok && !d.valid) {
+        statusEl.textContent = '✕ 已失效(' + (d.message || '请重新扫码登录') + ')';
+        statusEl.style.color = 'var(--state-error)';
+        showToast(d.message || 'B 站登录已失效,请重新登录', 'error');
+      } else {
+        statusEl.textContent = '⚠ 检测失败:' + (d.message || '未知错误');
+        statusEl.style.color = 'var(--apple-muted-foreground)';
+        showToast('检测失败:' + (d.message || '未知错误'), 'error');
+      }
+    })
+    .catch(function (e) {
+      statusEl.textContent = '⚠ 检测请求失败:' + (e && e.message ? e.message : e);
+      statusEl.style.color = 'var(--apple-muted-foreground)';
+      showToast('检测请求失败', 'error');
+    })
+    .finally(function () {
+      setBtnLoading(btn, false);
+    });
+}
+
+/**
+ * 检测 YouTube OAuth 登录态:调用 POST /api/youtube/oauth/check
+ * 后端会调 refreshYouTubeAccessToken,如果 refresh_token 失效会返回 valid=false
+ * 流程同 detectBiliLogin
+ */
+export function detectYouTubeOAuth() {
+  var btn = document.querySelector('[data-dom-id="yt-check-btn"]');
+  var statusEl = document.querySelector('[data-dom-id="yt-login-status"]');
+  if (!btn || !statusEl) return;
+  if (btn.disabled) return;
+
+  setBtnLoading(btn, true, '检测中…');
+  statusEl.textContent = '正在检测…';
+  statusEl.style.color = 'var(--apple-muted-foreground)';
+
+  apiPost('/api/youtube/oauth/check', {})
+    .then(function (d) {
+      if (d.ok && d.valid) {
+        var text = '✓ 有效(账号: ' + (d.email || '(未知)') + ')';
+        var expireDesc = formatExpiresIn(d.expires_at);
+        if (expireDesc && expireDesc !== '已过期') text += ', ' + expireDesc;
+        statusEl.textContent = text;
+        statusEl.style.color = 'var(--state-success)';
+        showToast('YouTube OAuth 登录态有效' + (d.refreshed ? '(已自动刷新)' : ''), 'success');
+      } else if (d.ok && !d.valid) {
+        statusEl.textContent = '✕ 已失效(' + (d.message || '请重新 OAuth 登录') + ')';
+        statusEl.style.color = 'var(--state-error)';
+        showToast(d.message || 'YouTube OAuth 登录已失效,请重新登录', 'error');
+      } else {
+        statusEl.textContent = '⚠ 检测失败:' + (d.message || '未知错误');
+        statusEl.style.color = 'var(--apple-muted-foreground)';
+        showToast('检测失败:' + (d.message || '未知错误'), 'error');
+      }
+    })
+    .catch(function (e) {
+      statusEl.textContent = '⚠ 检测请求失败:' + (e && e.message ? e.message : e);
+      statusEl.style.color = 'var(--apple-muted-foreground)';
+      showToast('检测请求失败', 'error');
+    })
+    .finally(function () {
+      setBtnLoading(btn, false);
+    });
+}
+
 export function initAuth() {
   // ===== 鉴权检查 =====
   // 1. 系统未初始化 -> 跳 login
@@ -520,6 +632,11 @@ export function initAuth() {
   if (biliQrBtn) biliQrBtn.addEventListener('click', openBiliPopupLogin);
   var ytOAuthBtn = document.querySelector('[data-dom-id="yt-oauth-login"]');
   if (ytOAuthBtn) ytOAuthBtn.addEventListener('click', openYtOAuthLogin);
+  // 检测按钮:bili-check-btn / yt-check-btn
+  var biliCheckBtn = document.querySelector('[data-dom-id="bili-check-btn"]');
+  if (biliCheckBtn) biliCheckBtn.addEventListener('click', detectBiliLogin);
+  var ytCheckBtn = document.querySelector('[data-dom-id="yt-check-btn"]');
+  if (ytCheckBtn) ytCheckBtn.addEventListener('click', detectYouTubeOAuth);
   var changePwdBtn = document.querySelector('[data-dom-id="change-password-btn"]');
   if (changePwdBtn) changePwdBtn.addEventListener('click', openChangePasswordModal);
 
