@@ -13,6 +13,7 @@
 import { initTheme } from './theme.mjs';
 import { showToast, ensureToastContainer } from './components/toast.mjs';
 import { setBtnLoading } from './components/button.mjs';
+import './speed-insights.mjs';
 
 // 1. 主题(最早,避免 FOUC)
 initTheme();
@@ -217,5 +218,5 @@ if (forgotBtn) {
   });
 }
 
-// 9. Lucide 图标渲染
+// 9. Lucide 图���渲染
 window.lucide?.createIcons();
