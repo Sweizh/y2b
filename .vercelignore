@@ -4,8 +4,8 @@
 # Cloudflare Worker 源码(Vercel 不用)
 src/
 
-# 构建脚本(Vercel 不用)
-scripts/
+# 注意:scripts/ 不能 ignore,因为 package.json 的 postinstall 会跑 scripts/setup.mjs
+# setup.mjs 内部已加 VERCEL=1 检测会自动跳过 wrangler.toml 生成
 
 # Python 虚拟环境
 .venv/
