@@ -47,7 +47,7 @@ function redirectError(prefix: string, status: number, endpoint: string, locatio
   let absLoc = location;
   try { absLoc = new URL(location, endpoint).toString(); } catch {}
   if (absLoc === endpoint || location === endpoint) {
-    return { success: false, message: `${prefix} 返回 ${status} 重定向到自身(死循环),请检查 API 地址是否正确:${endpoint}` };
+    return { success: false, message: `${prefix} 返回 ${status} 重定向到自身 (Location: ${location}),请检查 API 地址是否正确:${endpoint}` };
   }
   return { success: false, message: `${prefix} 返回 ${status} 重定向到 ${absLoc},请检查 API 地址是否正确:${endpoint}` };
 }
@@ -70,7 +70,6 @@ app.post('/asr', async (c) => {
         messages: [{
           role: 'user',
           content: [
-            { type: 'text', text: '请转录以下音频' },
             { type: 'input_audio', input_audio: { data: SILENCE_WAV_BASE64, format: 'wav' } },
           ],
         }],
