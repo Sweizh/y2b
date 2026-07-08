@@ -5,22 +5,39 @@ import { getRawConfig } from '../kv';
 
 const app = new Hono<{ Bindings: Env }>();
 
+// 把用户配置的 base URL 补全为 OpenAI 兼容的 /chat/completions 端点
+// 兼容两种填法:
+//   1. https://api.example.com/v1          → 补成 .../v1/chat/completions
+//   2. https://api.example.com/v1/chat/completions → 原样使用
+// 与 scripts/main.py 的 buildChatCompletionsUrl 保持一致
+function buildChatCompletionsUrl(baseUrl: string): string {
+  let url = baseUrl.trim();
+  // 去掉尾部斜杠
+  while (url.endsWith('/')) url = url.slice(0, -1);
+  // 已是完整 chat/completions 端点,原样返回
+  if (url.endsWith('/chat/completions')) return url;
+  // 否则补 /chat/completions
+  return url + '/chat/completions';
+}
+
 // 测试 ASR API 连通性
-// MiMo ASR 端点：https://api.xiaomimimo.com/v1/chat/completions
+// MiMo ASR 端点:https://api.xiaomimimo.com/v1/chat/completions
+// 用户可填 base URL (https://api.xiaomimimo.com/v1) 或完整端点
 app.post('/asr', async (c) => {
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.asr_api || !cfg.asr_key) {
     return c.json({ success: false, message: '请先配置 ASR API 地址和密钥' }, 400);
   }
   try {
-    const resp = await fetch(cfg.asr_api, {
+    const endpoint = buildChatCompletionsUrl(cfg.asr_api);
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${cfg.asr_key}`,
       },
       body: JSON.stringify({
-        model: 'mimo-asr',
+        model: cfg.asr_model || 'mimo-asr',
         messages: [{ role: 'user', content: 'test' }],
         max_tokens: 8,
       }),
@@ -41,20 +58,22 @@ app.post('/asr', async (c) => {
 });
 
 // 测试翻译 API 连通性
+// 用户可填 base URL (https://api.example.com/v1) 或完整端点
 app.post('/translate', async (c) => {
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.translate_api || !cfg.translate_key) {
     return c.json({ success: false, message: '请先配置翻译 API 地址和密钥' }, 400);
   }
   try {
-    const resp = await fetch(cfg.translate_api, {
+    const endpoint = buildChatCompletionsUrl(cfg.translate_api);
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${cfg.translate_key}`,
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: cfg.translate_model || 'gpt-3.5-turbo',
         messages: [{ role: 'user', content: 'Translate "hello" to Chinese, reply only with the translation.' }],
         max_tokens: 16,
       }),
