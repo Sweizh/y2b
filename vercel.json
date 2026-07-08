@@ -5,6 +5,7 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/bili/qrcode", "destination": "/api/bili-qrcode" },
-    { "source": "/bili/qrcode-status", "destination": "/api/bili-qrcode-status" }
+    { "source": "/bili/qrcode-status", "destination": "/api/bili-qrcode-status" },
+    { "source": "/bili/nav", "destination": "/api/bili-nav" }
   ]
 }
