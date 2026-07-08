@@ -5,11 +5,10 @@ node_modules/
 /dist/
 .wrangler/
 
-# 前端构建产物(由 npm run build:frontend 生成,不入库;仅保留 .gitkeep 占位)
-public/css/dist/*
-!public/css/dist/.gitkeep
-public/js/dist/*
-!public/js/dist/.gitkeep
+# 前端构建产物(由 npm run build:frontend 生成)
+# 注:为兼容 Cloudflare Workers Builds 的自动部署流程,构建产物入库
+# 本地开发时 npm run build:frontend 会覆盖这些文件
+# 部署前 npm run deploy 会自动重新构建
 
 # Python 缓存
 __pycache__/
