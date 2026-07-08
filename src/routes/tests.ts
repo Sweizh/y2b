@@ -20,9 +20,40 @@ function buildChatCompletionsUrl(baseUrl: string): string {
   return url + '/chat/completions';
 }
 
+// 100ms 静音 WAV(8kHz mono 16-bit)的 base64,用于 ASR 测试音频输入。
+// ASR 模型期望 input_audio 内容,纯文本会返回 400 "requires input_audio content"。
+// 生成方式:Python wave + base64,见 commit 历史。
+const SILENCE_WAV_BASE64 =
+  'UklGRsQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+// 通用 fetch 请求头。某些 API 网关(如 api.sweizh.top)对缺 Accept/User-Agent 的
+// 请求会返回 301 重定向到登录页,补齐后行为正常。
+function apiHeaders(authKey: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${authKey}`,
+    'User-Agent': 'yt2bili-worker/1.0',
+  };
+}
+
+// 处理 3xx 重定向:manual 模式下 fetch 不自动 follow,我们手动判断一次。
+// 若 Location 与请求 URL 相同(或为空),视为死循环;否则把 Location 回报给用户诊断。
+function redirectError(prefix: string, status: number, endpoint: string, location: string | null): { success: false; message: string } {
+  if (!location) {
+    return { success: false, message: `${prefix} 返回 ${status} 重定向但无 Location 头,请检查 API 地址是否正确:${endpoint}` };
+  }
+  // 解析为绝对 URL 比较
+  let absLoc = location;
+  try { absLoc = new URL(location, endpoint).toString(); } catch {}
+  if (absLoc === endpoint || location === endpoint) {
+    return { success: false, message: `${prefix} 返回 ${status} 重定向到自身(死循环),请检查 API 地址是否正确:${endpoint}` };
+  }
+  return { success: false, message: `${prefix} 返回 ${status} 重定向到 ${absLoc},请检查 API 地址是否正确:${endpoint}` };
+}
+
 // 测试 ASR API 连通性
-// MiMo ASR 端点:https://api.xiaomimimo.com/v1/chat/completions
-// 用户可填 base URL (https://api.xiaomimimo.com/v1) 或完整端点
+// 发送一段静音音频(input_audio),ASR 模型应返回转录结果(可能为空字符串)
 app.post('/asr', async (c) => {
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.asr_api || !cfg.asr_key) {
@@ -32,33 +63,33 @@ app.post('/asr', async (c) => {
     const endpoint = buildChatCompletionsUrl(cfg.asr_api);
     const resp = await fetch(endpoint, {
       method: 'POST',
-      // manual:避免某些 API 网关返回 30x 到自身导致 Worker fetch 死循环
       redirect: 'manual',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cfg.asr_key}`,
-      },
+      headers: apiHeaders(cfg.asr_key),
       body: JSON.stringify({
         model: cfg.asr_model || 'mimo-asr',
-        messages: [{ role: 'user', content: 'test' }],
-        max_tokens: 8,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: '请转录以下音频' },
+            { type: 'input_audio', input_audio: { data: SILENCE_WAV_BASE64, format: 'wav' } },
+          ],
+        }],
+        max_tokens: 64,
       }),
     });
-    // opaqueredirect / 3xx:服务端返回了重定向,manual 模式下无法读 body
-    if (resp.type === 'opaqueredirect' || resp.status === 0 || (resp.status >= 300 && resp.status < 400)) {
-      return c.json({
-        success: false,
-        message: `ASR 端点返回 ${resp.status} 重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
-      });
+    if (resp.status === 0 || (resp.status >= 300 && resp.status < 400)) {
+      return c.json(redirectError('ASR 端点', resp.status || 301, endpoint, resp.headers.get('location')));
     }
     if (!resp.ok) {
       const text = await resp.text();
       return c.json({ success: false, message: `ASR API 返回 ${resp.status}：${text.slice(0, 200)}` });
     }
     const data = await resp.json() as any;
+    // 提取转录文本用于回显
+    const transcript = data?.choices?.[0]?.message?.content;
     return c.json({
       success: true,
-      message: 'ASR API 连通正常',
+      message: 'ASR API 连通正常' + (transcript ? `(转录:${typeof transcript === 'string' ? transcript.slice(0, 30) : '(非文本)'})` : ''),
       raw_model: data.model,
     });
   } catch (e: any) {
@@ -67,7 +98,7 @@ app.post('/asr', async (c) => {
 });
 
 // 测试翻译 API 连通性
-// 用户可填 base URL (https://api.example.com/v1) 或完整端点
+// 发送一条翻译请求,收到回复即视为连通正常
 app.post('/translate', async (c) => {
   const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
   if (!cfg.translate_api || !cfg.translate_key) {
@@ -77,30 +108,27 @@ app.post('/translate', async (c) => {
     const endpoint = buildChatCompletionsUrl(cfg.translate_api);
     const resp = await fetch(endpoint, {
       method: 'POST',
-      // manual:避免某些 API 网关返回 30x 到自身导致 Worker fetch 死循环
       redirect: 'manual',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cfg.translate_key}`,
-      },
+      headers: apiHeaders(cfg.translate_key),
       body: JSON.stringify({
         model: cfg.translate_model || 'gpt-3.5-turbo',
         messages: [{ role: 'user', content: 'Translate "hello" to Chinese, reply only with the translation.' }],
         max_tokens: 16,
       }),
     });
-    // opaqueredirect / 3xx:服务端返回了重定向,manual 模式下无法读 body
-    if (resp.type === 'opaqueredirect' || resp.status === 0 || (resp.status >= 300 && resp.status < 400)) {
-      return c.json({
-        success: false,
-        message: `翻译端点返回 ${resp.status} 重定向(可能死循环),请检查 API 地址是否正确:${endpoint}`,
-      });
+    if (resp.status === 0 || (resp.status >= 300 && resp.status < 400)) {
+      return c.json(redirectError('翻译端点', resp.status || 301, endpoint, resp.headers.get('location')));
     }
     if (!resp.ok) {
       const text = await resp.text();
       return c.json({ success: false, message: `翻译 API 返回 ${resp.status}：${text.slice(0, 200)}` });
     }
-    return c.json({ success: true, message: '翻译 API 连通正常' });
+    const data = await resp.json() as any;
+    const reply = data?.choices?.[0]?.message?.content;
+    return c.json({
+      success: true,
+      message: '翻译 API 连通正常' + (reply ? `(回复:${typeof reply === 'string' ? reply.slice(0, 30) : '(非文本)'})` : ''),
+    });
   } catch (e: any) {
     return c.json({ success: false, message: '请求失败：' + (e.message || e) });
   }
