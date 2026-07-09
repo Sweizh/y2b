@@ -447,6 +447,7 @@ def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_over
         ydl_opts = {
             "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
             "outtmpl": video_path,
+            "merge_output_format": "mp4",  # 强制 merge 成 mp4(避免 webm 文件名不匹配)
             "writethumbnail": True,
             # 字幕一律走 ASR,不下载 YouTube 自动字幕
             "quiet": True,
