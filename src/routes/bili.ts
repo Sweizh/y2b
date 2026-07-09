@@ -102,8 +102,9 @@ async function fetchSeasonsViaVercel(cfg: any): Promise<any> {
 }
 
 // 通过 Vercel Edge 代理调 B 站 season episodes API,绕过 CF Worker IP 反爬
+// 直接 POST 到 /api/bili-season-episodes(绕过 vercel.json 的 :id rewrite,避免 Vercel 平台 502)
 async function fetchSeasonEpisodesViaVercel(cfg: any, seasonId: string): Promise<any> {
-  const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/seasons/${encodeURIComponent(seasonId)}/episodes`, {
+  const resp = await fetch(`${VERCEL_BILI_PROXY}/api/bili-season-episodes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
     body: JSON.stringify({
