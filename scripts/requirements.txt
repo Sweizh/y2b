@@ -1,7 +1,8 @@
-bilibili-api-python==16.2.0
+# bilibili-api-python>=16.2.0: 升级到 17.x 放宽 pillow 约束(16.2.0 锁 pillow~=10.2.0 与 videocaptioner pillow>=12 冲突)
+bilibili-api-python>=16.2.0
 # SEC-08: yt-dlp 放宽下限,跟进 YouTube 站点变更(原锁 2024.12.6 距今过旧,多 extractor 漏洞)
 yt-dlp>=2024.12.6
-# bilibili-api-python 16.2.0 要求 requests~=2.31.0,不能锁死 2.32.3 否则依赖冲突
-requests>=2.31.0,<2.32.0
+# bilibili-api-python 17.x 不再锁 requests 版本,但保留下限兼容
+requests>=2.31.0
 # Task 7: videocaptioner 提供 ASR + 字幕翻译(bing/google 需加 --no-optimize --no-split)
 videocaptioner>=1.4.2
