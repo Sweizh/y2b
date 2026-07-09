@@ -44,6 +44,7 @@ export function initChannels() {
   var cachedTids = null;
   // Bili seasons cache (may fail without bili cookie).
   var cachedSeasons = null;
+  var seasonsError = null;
   var seasonsLoading = false;
 
   // ---- search binding ----
@@ -317,7 +318,9 @@ export function initChannels() {
       .then(function (d) {
         if (d && d.error) {
           cachedSeasons = [];
+          seasonsError = d.error;
         } else {
+          seasonsError = null;
           // Adapt multiple shapes: {seasons:[...]}/{list:[...]}/[...]
           var arr = [];
           if (Array.isArray(d)) arr = d;
@@ -329,8 +332,9 @@ export function initChannels() {
         seasonsLoading = false;
         cb(cachedSeasons);
       })
-      .catch(function () {
+      .catch(function (e) {
         cachedSeasons = [];
+        seasonsError = (e && e.message) || String(e);
         seasonsLoading = false;
         cb([]);
       });
@@ -383,7 +387,11 @@ export function initChannels() {
     // Season options
     var seasonOpts = '<option value="">不加入合集</option>';
     if (seasons.length === 0) {
-      seasonOpts = '<option value="" disabled>暂无合集(可在 B 站创作中心创建)</option>';
+      if (seasonsError) {
+        seasonOpts = '<option value="" disabled>加载失败: ' + escapeHtml(String(seasonsError).slice(0, 80)) + '</option>';
+      } else {
+        seasonOpts = '<option value="" disabled>暂无合集(可在 B 站创作中心创建)</option>';
+      }
     } else {
       seasons.forEach(function (s) {
         var sid = escapeHtml(String(s.id || s.season_id || ''));

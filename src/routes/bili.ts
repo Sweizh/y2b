@@ -79,7 +79,14 @@ async function fetchSeasonsViaVercel(cfg: any): Promise<any> {
       buvid3: cfg.bili_buvid3 || '',
     }),
   });
-  const data = await resp.json() as any;
+  // 先读 text 再 parse,防止 Vercel 返回非 JSON(如 HTML 错误页)导致 resp.json() 抛异常
+  const text = await resp.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Vercel Edge 返回非 JSON (HTTP ${resp.status}): ${text.slice(0, 200)}`);
+  }
   if (data.error) {
     // 完整透传 Vercel Edge 返回的诊断字段:error + message + cause + bodyPreview + status + contentType
     const parts = [data.error];
@@ -87,6 +94,7 @@ async function fetchSeasonsViaVercel(cfg: any): Promise<any> {
     if (data.cause) parts.push(`首次: ${data.cause}`);
     if (data.status) parts.push(`HTTP ${data.status}`);
     if (data.contentType) parts.push(`content-type: ${data.contentType}`);
+    if (data.failedUrl) parts.push(`URL: ${data.failedUrl}`);
     if (data.bodyPreview) parts.push(`预览: ${String(data.bodyPreview).slice(0, 120)}`);
     throw new Error(parts.join(' | '));
   }
@@ -104,7 +112,13 @@ async function fetchNavViaVercel(cfg: any): Promise<any> {
       buvid3: cfg.bili_buvid3 || '',
     }),
   });
-  const data = await resp.json() as any;
+  const text = await resp.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Vercel Edge 返回非 JSON (HTTP ${resp.status}): ${text.slice(0, 200)}`);
+  }
   if (data.error) {
     const parts = [data.error];
     if (data.message) parts.push(`原因: ${data.message}`);
