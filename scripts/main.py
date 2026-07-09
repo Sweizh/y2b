@@ -20,6 +20,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import tempfile
 from pathlib import Path
@@ -168,6 +169,32 @@ def run_videocaptioner(args: list, timeout: int = 600) -> str:
     return (proc.stdout or "").strip()
 
 
+def _run_with_timeout(func, timeout: int, desc: str = "操作"):
+    """在线程中运行 func,超时抛 RuntimeError。
+
+    用于给无法直接设置 timeout 的阻塞调用(如 bilibili-api 的 sync())
+    兜底,避免 GitHub Actions 120min 超时前进程静默卡死。
+    超时后子线程作为 daemon 随进程退出而被清理。
+    """
+    result = [None]
+    error = [None]
+
+    def _wrapper():
+        try:
+            result[0] = func()
+        except BaseException as e:
+            error[0] = e
+
+    t = threading.Thread(target=_wrapper, daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+    if t.is_alive():
+        raise RuntimeError(f"{desc}超时(>{timeout}s)")
+    if error[0] is not None:
+        raise error[0]
+    return result[0]
+
+
 def _chat_completions_url(api: str) -> str:
     """补全 OpenAI 兼容端点:用户可能只填了 base(如 https://api.xxx.com/v1),
     自动补 /chat/completions;已含完整路径则原样返回。"""
@@ -239,6 +266,12 @@ def upload_to_bili(cfg: dict, video_path: str, cover_path: str, title: str,
         bili_jct=cfg.get("bili_jct", ""),
         buvid3=cfg.get("bili_buvid3", ""),
     )
+    # 上传前校验凭证:凭证过期会导致 preupload/分片阶段静默卡死
+    # check_valid 调用 /x/web-interface/nav,凭证无效快速返回 False
+    valid = _run_with_timeout(lambda: sync(credential.check_valid()), 30, "B站凭证校验")
+    if not valid:
+        raise RuntimeError("B站凭证无效或已过期,请重新扫码登录")
+    log("bili_credential", "valid")
     # 构建上传分 P
     page = video_uploader.VideoUploaderPage(
         path=video_path,
@@ -264,8 +297,8 @@ def upload_to_bili(cfg: dict, video_path: str, cover_path: str, title: str,
         credential=credential,
         cover=cover,
     )
-    # 同步上传
-    result = sync(uploader.start())
+    # 同步上传(加超时兜底:避免 bilibili-api 17.x 内部 httpx 请求无限等待)
+    result = _run_with_timeout(lambda: sync(uploader.start()), 1200, "B站视频上传")
     if not result or "bvid" not in result:
         raise RuntimeError(f"上传失败,返回: {result}")
     bvid = result["bvid"]
@@ -285,12 +318,13 @@ def upload_to_bili(cfg: dict, video_path: str, cover_path: str, title: str,
                     srt_content = f.read()
                 # 转换 SRT 为 B 站字幕 JSON 格式
                 subtitle_json = srt_to_bili_subtitle(srt_content)
-                # 字幕上传是协程,需 sync() 包裹
-                sync(video.upload_subtitle(
-                    subtitle_json,
-                    language=lang,
-                    title="字幕",
-                ))
+                # 字幕上传是协程,需 sync() 包裹(加超时兜底)
+                _run_with_timeout(
+                    lambda: sync(video.upload_subtitle(
+                        subtitle_json, language=lang, title="字幕",
+                    )),
+                    180, "B站字幕上传",
+                )
                 log("bili_subtitle", "success", bvid=bvid, lang=lang)
         except Exception as e:
             # 字幕失败提升到 error 级别,并写入回写结果让 Worker 决策补传
