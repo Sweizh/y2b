@@ -36,8 +36,9 @@ jobs:
       - name: Install ffmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg libmp3lame0
           ffmpeg -version | head -1
+          ffmpeg -encoders 2>/dev/null | grep mp3lame || echo "WARN: libmp3lame encoder not found"
 
       - name: Install Python dependencies
         run: |
