@@ -81,7 +81,14 @@ async function fetchSeasonsViaVercel(cfg: any): Promise<any> {
   });
   const data = await resp.json() as any;
   if (data.error) {
-    throw new Error(data.error + (data.bodyPreview ? ` (预览: ${String(data.bodyPreview).slice(0, 80)})` : ''));
+    // 完整透传 Vercel Edge 返回的诊断字段:error + message + cause + bodyPreview + status + contentType
+    const parts = [data.error];
+    if (data.message) parts.push(`原因: ${data.message}`);
+    if (data.cause) parts.push(`首次: ${data.cause}`);
+    if (data.status) parts.push(`HTTP ${data.status}`);
+    if (data.contentType) parts.push(`content-type: ${data.contentType}`);
+    if (data.bodyPreview) parts.push(`预览: ${String(data.bodyPreview).slice(0, 120)}`);
+    throw new Error(parts.join(' | '));
   }
   return data.seasons;
 }
@@ -99,7 +106,10 @@ async function fetchNavViaVercel(cfg: any): Promise<any> {
   });
   const data = await resp.json() as any;
   if (data.error) {
-    throw new Error(data.error);
+    const parts = [data.error];
+    if (data.message) parts.push(`原因: ${data.message}`);
+    if (data.bodyPreview) parts.push(`预览: ${String(data.bodyPreview).slice(0, 120)}`);
+    throw new Error(parts.join(' | '));
   }
   return data.nav;
 }
