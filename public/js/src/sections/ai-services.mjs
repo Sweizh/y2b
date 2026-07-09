@@ -44,6 +44,14 @@ const aiFieldMap = {
   '语音识别 API 密钥': 'asr_key',
   '翻译 API 地址': 'translate_api',
   '翻译 API 密钥': 'translate_key',
+  // VideoCaptioner 集成新增字段(spec integrate-videocaptioner Task 8)
+  'ASR 后端': 'asr_provider',
+  '字幕翻译服务': 'subtitle_translator',
+  '目标语言': 'subtitle_target_language',
+  '字幕优化': 'subtitle_optimize',
+  '字幕断句': 'subtitle_split',
+  '反思翻译': 'subtitle_reflect',
+  '文稿提示': 'subtitle_prompt',
 };
 
 /**
@@ -57,6 +65,8 @@ function injectAiHelpButtons(section) {
     var text = lbl.textContent.trim();
     var key = aiFieldMap[text];
     if (!key) return;
+    // 仅当存在帮助文本时才注入按钮(新字段 asr_provider/subtitle_* 无帮助文本,跳过)
+    if (!getHelpText(key)) return;
     if (lbl.dataset.helpInjected) return;
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -72,6 +82,42 @@ function injectAiHelpButtons(section) {
     wrapper.appendChild(lbl);
     wrapper.appendChild(btn);
     lbl.dataset.helpInjected = '1';
+  });
+}
+
+/**
+ * ASR 后端联动:provider=bijian/jianying 时禁用 asr_api/asr_key(及未来 asr_model)
+ * 三字段并加灰显样式;provider=whisper-api 时恢复。值不清空,仅切换 disabled + 灰显。
+ * @param {string} provider  bijian | jianying | whisper-api
+ */
+function syncAsrProviderFields(provider) {
+  var disabled = provider !== 'whisper-api';
+  // 当前 UI 仅暴露 asr_api/asr_key 两字段(asr_model 暂无 UI 输入);
+  // 列表预留 'fld-asr-api-model' 以便未来加入时自动联动。
+  var ids = ['fld-asr-api-url', 'fld-asr-api-key', 'fld-asr-api-model'];
+  ids.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = disabled;
+    el.style.opacity = disabled ? '0.5' : '';
+    el.style.cursor = disabled ? 'not-allowed' : '';
+  });
+}
+
+/**
+ * 字幕翻译服务联动:translator=bing/google 时禁用 translate_api/translate_key
+ * (及未来 translate_model);translator=llm 时恢复。值不清空。
+ * @param {string} translator  llm | bing | google
+ */
+function syncSubtitleTranslatorFields(translator) {
+  var disabled = translator !== 'llm';
+  var ids = ['fld-translate-api-url', 'fld-translate-api-key', 'fld-translate-api-model'];
+  ids.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = disabled;
+    el.style.opacity = disabled ? '0.5' : '';
+    el.style.cursor = disabled ? 'not-allowed' : '';
   });
 }
 
@@ -111,6 +157,40 @@ function populateAiServices(cfg) {
   var promptInput = aiSection.querySelector('[data-field="translate_prompt"]');
   if (promptInput) {
     promptInput.value = cfg.translate_prompt || '';
+  }
+  // VideoCaptioner 集成新增字段回填(spec integrate-videocaptioner Task 8)
+  // ASR 后端下拉 + 联动禁用 asr_api/asr_key/asr_model
+  var asrProviderSel = aiSection.querySelector('[data-field="asr_provider"]');
+  var asrProvider = cfg.asr_provider || 'bijian';
+  if (asrProviderSel) asrProviderSel.value = asrProvider;
+  syncAsrProviderFields(asrProvider);
+  // 字幕翻译服务下拉 + 联动禁用 translate_api/translate_key/translate_model
+  var subTranslatorSel = aiSection.querySelector('[data-field="subtitle_translator"]');
+  var subTranslator = cfg.subtitle_translator || 'llm';
+  if (subTranslatorSel) subTranslatorSel.value = subTranslator;
+  syncSubtitleTranslatorFields(subTranslator);
+  // 字幕选项区:目标语言
+  var targetLangInput = aiSection.querySelector('[data-field="subtitle_target_language"]');
+  if (targetLangInput) {
+    targetLangInput.value = cfg.subtitle_target_language || 'zh-Hans';
+  }
+  // 字幕选项区:优化/断句/反思开关(switch 用 data-checked 标识,与 translate_*_enabled 同模式)
+  var optSw = aiSection.querySelector('[data-field="subtitle_optimize"]');
+  if (optSw) {
+    optSw.setAttribute('data-checked', cfg.subtitle_optimize !== false ? 'true' : 'false');
+  }
+  var splitSw = aiSection.querySelector('[data-field="subtitle_split"]');
+  if (splitSw) {
+    splitSw.setAttribute('data-checked', cfg.subtitle_split !== false ? 'true' : 'false');
+  }
+  var reflectSw = aiSection.querySelector('[data-field="subtitle_reflect"]');
+  if (reflectSw) {
+    reflectSw.setAttribute('data-checked', cfg.subtitle_reflect === true ? 'true' : 'false');
+  }
+  // 字幕选项区:文稿提示 textarea
+  var subPromptInput = aiSection.querySelector('[data-field="subtitle_prompt"]');
+  if (subPromptInput) {
+    subPromptInput.value = cfg.subtitle_prompt || '';
   }
 }
 
@@ -162,6 +242,29 @@ function setupAiSave() {
       }
     });
   });
+  // 下拉(select 非 input/textarea,不参与 dirty 检测):change 时触发联动 + 启用保存按钮
+  var asrProviderSel = aiSection.querySelector('[data-field="asr_provider"]');
+  if (asrProviderSel) {
+    asrProviderSel.addEventListener('change', function () {
+      syncAsrProviderFields(asrProviderSel.value);
+      if (save.disabled) {
+        save.disabled = false;
+        save.style.opacity = '1';
+        save.style.cursor = 'pointer';
+      }
+    });
+  }
+  var subTranslatorSel = aiSection.querySelector('[data-field="subtitle_translator"]');
+  if (subTranslatorSel) {
+    subTranslatorSel.addEventListener('change', function () {
+      syncSubtitleTranslatorFields(subTranslatorSel.value);
+      if (save.disabled) {
+        save.disabled = false;
+        save.style.opacity = '1';
+        save.style.cursor = 'pointer';
+      }
+    });
+  }
   var fields = Array.from(aiSection.querySelectorAll('input,textarea'));
   var dirty = setupDirtyCheck(fields, save);
   save.addEventListener('click', function () {
@@ -196,6 +299,19 @@ function setupAiSave() {
     if (promptInput) {
       body.translate_prompt = promptInput.value;
     }
+    // VideoCaptioner 集成新增字段收集(spec integrate-videocaptioner Task 8)
+    if (asrProviderSel) body.asr_provider = asrProviderSel.value;
+    if (subTranslatorSel) body.subtitle_translator = subTranslatorSel.value;
+    var targetLangInput = aiSection.querySelector('[data-field="subtitle_target_language"]');
+    if (targetLangInput) body.subtitle_target_language = targetLangInput.value;
+    var optSw = aiSection.querySelector('[data-field="subtitle_optimize"]');
+    if (optSw) body.subtitle_optimize = optSw.getAttribute('data-checked') === 'true';
+    var splitSw = aiSection.querySelector('[data-field="subtitle_split"]');
+    if (splitSw) body.subtitle_split = splitSw.getAttribute('data-checked') === 'true';
+    var reflectSw = aiSection.querySelector('[data-field="subtitle_reflect"]');
+    if (reflectSw) body.subtitle_reflect = reflectSw.getAttribute('data-checked') === 'true';
+    var subPromptInput = aiSection.querySelector('[data-field="subtitle_prompt"]');
+    if (subPromptInput) body.subtitle_prompt = subPromptInput.value;
     apiPost('/api/config', body, { method: 'PUT' })
       .then(function (d) {
         setBtnLoading(save, false);

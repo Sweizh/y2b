@@ -23,14 +23,30 @@ app.put('/', async (c) => {
     'yt_api_key', 'yt_cookies',
     'yt_client_id', 'yt_client_secret', 'yt_redirect_uri',  // OAuth 客户端配置(管理员手动填)
     'gh_token', 'gh_repo',
-    'asr_api', 'asr_key', 'asr_model', 'translate_api', 'translate_key', 'translate_model',
+    'asr_api', 'asr_key', 'asr_model', 'asr_provider',  // asr_provider: bijian|jianying|whisper-api
+    'translate_api', 'translate_key', 'translate_model',
+    'subtitle_translator', 'subtitle_target_language',  // 字幕翻译服务(llm|bing|google)与目标语言
+    'subtitle_optimize', 'subtitle_split', 'subtitle_reflect', 'subtitle_prompt',  // 字幕处理选项与文稿提示
     'notify_webhook',
     'title_template',  // 标题翻译模板(非敏感文本,不脱敏不加密)
     'translate_subtitle_enabled',  // 字幕翻译开关(bool)
     'translate_title_enabled',     // 标题与简介翻译开关(bool)
     'translate_prompt',            // 翻译提示词(非敏感文本)
   ];
-  const BOOL_FIELDS = ['translate_subtitle_enabled', 'translate_title_enabled'];
+  // 枚举字段合法值
+  const ASR_PROVIDERS = ['bijian', 'jianying', 'whisper-api'];
+  const SUBTITLE_TRANSLATORS = ['llm', 'bing', 'google'];
+  const BOOL_FIELDS = [
+    'translate_subtitle_enabled', 'translate_title_enabled',
+    'subtitle_optimize', 'subtitle_split', 'subtitle_reflect',
+  ];
+  // 枚举字段校验:非法值返回 400
+  if (body.asr_provider !== undefined && !ASR_PROVIDERS.includes(body.asr_provider)) {
+    return c.json({ error: 'asr_provider 非法值,只接受: ' + ASR_PROVIDERS.join('|') }, 400);
+  }
+  if (body.subtitle_translator !== undefined && !SUBTITLE_TRANSLATORS.includes(body.subtitle_translator)) {
+    return c.json({ error: 'subtitle_translator 非法值,只接受: ' + SUBTITLE_TRANSLATORS.join('|') }, 400);
+  }
   const merged: any = { ...existing };
   for (const f of ALLOWED_FIELDS) {
     if (body[f] === undefined) continue;

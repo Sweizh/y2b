@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "YouTube 到 Bilibili 自动化搬运系统",
+  "license": "GPL-3.0",
   "main": "src/index.ts",
   "scripts": {
     "setup": "node scripts/setup.mjs",

@@ -452,4 +452,4 @@ KV Key 设计：
 
 ## License
 
-MIT
+GPL-3.0

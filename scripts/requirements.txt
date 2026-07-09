@@ -3,3 +3,5 @@ bilibili-api-python==16.2.0
 yt-dlp>=2024.12.6
 # bilibili-api-python 16.2.0 要求 requests~=2.31.0,不能锁死 2.32.3 否则依赖冲突
 requests>=2.31.0,<2.32.0
+# Task 7: videocaptioner 提供 ASR + 字幕翻译(bing/google 需加 --no-optimize --no-split)
+videocaptioner>=1.4.2

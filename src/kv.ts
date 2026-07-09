@@ -35,6 +35,14 @@ export interface Config {
   asr_api?: string;
   asr_key?: string;
   asr_model?: string;          // ASR 模型名(如 mimo-v2.5-asr),留空用 Runner 默认值
+  // VideoCaptioner 集成(ASR 后端 / 字幕处理)
+  asr_provider?: string;              // ASR 后端: bijian(默认) | jianying | whisper-api
+  subtitle_translator?: string;       // 字幕翻译服务: llm(默认) | bing | google
+  subtitle_target_language?: string;  // 目标语言 BCP 47,默认 zh-Hans
+  subtitle_optimize?: boolean;        // 是否 ASR 纠错优化,默认 true
+  subtitle_split?: boolean;          // 是否语义断句,默认 true
+  subtitle_reflect?: boolean;        // 是否反思式翻译,默认 false
+  subtitle_prompt?: string;          // 文稿提示(术语表/参考文稿)
   // 翻译
   translate_api?: string;
   translate_key?: string;

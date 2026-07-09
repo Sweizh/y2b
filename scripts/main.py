@@ -117,6 +117,53 @@ def extract_audio(video_path: str, audio_path: str) -> None:
     ], timeout=600)
 
 
+def run_videocaptioner(args: list, timeout: int = 600) -> str:
+    """调用 videocaptioner CLI,返回 stdout。
+
+    封装 subprocess 调用,处理超时与退出码。
+    退出码:0=成功,2=参数错误,3=文件不存在,4=依赖缺失,5=运行时错误;
+    非 0 抛 RuntimeError 并带 stderr 片段(前 300 字)。
+
+    日志:调用前记录命令参数(--api-key/--whisper-api-key 值脱敏为 ***),
+    调用后记录耗时与退出码。
+    """
+    _exit_meaning = {0: "成功", 2: "参数错误", 3: "文件不存在",
+                     4: "依赖缺失", 5: "运行时错误"}
+    secret_flags = {"--api-key", "--whisper-api-key"}
+    safe = []
+    i = 0
+    while i < len(args):
+        if args[i] in secret_flags and i + 1 < len(args):
+            safe.append(args[i])
+            safe.append("***")
+            i += 2
+        else:
+            safe.append(args[i])
+            i += 1
+    log("videocaptioner", "start", args=" ".join(safe))
+    start_ts = time.time()
+    try:
+        proc = subprocess.run(
+            ["videocaptioner"] + args,
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        elapsed = int(time.time() - start_ts)
+        log("videocaptioner", "timeout", elapsed=elapsed, timeout=timeout)
+        raise RuntimeError(f"videocaptioner 超时(>{timeout}s)") from e
+    elapsed = int(time.time() - start_ts)
+    if proc.returncode != 0:
+        stderr_tail = (proc.stderr or "").strip()[:300]
+        meaning = _exit_meaning.get(proc.returncode, "未知")
+        log("videocaptioner", "failed", returncode=proc.returncode,
+            meaning=meaning, stderr=stderr_tail, elapsed=elapsed)
+        raise RuntimeError(
+            f"videocaptioner 退出码 {proc.returncode}({meaning}): {stderr_tail}"
+        )
+    log("videocaptioner", "success", returncode=proc.returncode, elapsed=elapsed)
+    return (proc.stdout or "").strip()
+
+
 def _chat_completions_url(api: str) -> str:
     """补全 OpenAI 兼容端点:用户可能只填了 base(如 https://api.xxx.com/v1),
     自动补 /chat/completions;已含完整路径则原样返回。"""
@@ -124,81 +171,6 @@ def _chat_completions_url(api: str) -> str:
     if not endpoint.endswith("/chat/completions"):
         endpoint += "/chat/completions"
     return endpoint
-
-
-def call_asr(asr_api: str, asr_key: str, audio_path: str, model: str = "mimo-v2.5-asr") -> str:
-    """调用 ASR API(OpenAI 兼容 Chat Completions 多模态)转写音频,返回转写文本
-
-    MiMo 等兼容服务商的 ASR 走 chat/completions 端点,音频以 base64 data URL
-    放在 message content(多模态 input_audio),而非 Whisper 的 multipart
-    /audio/transcriptions(xiaomimimo 无该端点,返回 404)。
-
-    注:MiMo ASR 网关会自行注入转写 prompt,不接受额外 text part
-    (传 text part 会返回 400 "ASR request must not include text parts")。
-    输出格式由网关决定(通常为纯文本),下游 SRT 解析对非 SRT 输出会
-    产出空字幕,但视频上传不受影响(字幕为非致命步骤)。
-    """
-    if not asr_api or not asr_key:
-        raise RuntimeError("ASR API 未配置")
-    endpoint = _chat_completions_url(asr_api)
-    import base64
-    with open(audio_path, "rb") as f:
-        audio_b64 = base64.b64encode(f.read()).decode()
-    ext = Path(audio_path).suffix.lower().lstrip(".") or "mp3"
-    mime = {"mp3": "audio/mpeg", "wav": "audio/wav", "m4a": "audio/mp4",
-            "ogg": "audio/ogg"}.get(ext, "audio/mpeg")
-    data_url = f"data:{mime};base64,{audio_b64}"
-    resp = requests.post(
-        endpoint,
-        headers={
-            "Authorization": f"Bearer {asr_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "messages": [{
-                "role": "user",
-                # 仅音频,不加 text part(网关自行注入转写 prompt,加 text 会 400)
-                "content": [
-                    {"type": "input_audio", "input_audio": {"data": data_url, "format": ext}},
-                ],
-            }],
-        },
-        timeout=600,
-    )
-    if not resp.ok:
-        raise RuntimeError(f"ASR API 返回 {resp.status_code}: {resp.text[:200]}")
-    data = resp.json()
-    return data["choices"][0]["message"]["content"]
-
-
-def call_translate(translate_api: str, translate_key: str, srt_content: str,
-                   model: str = "gpt-3.5-turbo") -> str:
-    """调用翻译 API(OpenAI 兼容 Chat Completions)翻译 SRT 字幕"""
-    if not translate_api or not translate_key:
-        raise RuntimeError("翻译 API 未配置")
-    endpoint = _chat_completions_url(translate_api)
-    prompt = (
-        "请将以下 SRT 字幕文件翻译为简体中文,保持 SRT 格式不变(含序号、时间轴、换行)。"
-        "只输出翻译后的 SRT 内容,不要任何解释:\n\n" + srt_content
-    )
-    resp = requests.post(
-        endpoint,
-        headers={
-            "Authorization": f"Bearer {translate_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-        },
-        timeout=300,
-    )
-    if not resp.ok:
-        raise RuntimeError(f"翻译 API 返回 {resp.status_code}: {resp.text[:200]}")
-    data = resp.json()
-    return data["choices"][0]["message"]["content"]
 
 
 def call_translate_title(translate_api: str, translate_key: str, original_title: str,
@@ -567,35 +539,63 @@ def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_over
         extract_audio(video_path, audio_path)
         log("extract_audio", "success", video_id=video_id)
 
-        # 3. ASR 转写
+        # 3. ASR 转写(videocaptioner)
         log("asr", "start", video_id=video_id)
         srt_translated = ""
         srt_original = ""
+        srt_path = os.path.join(work_dir, f"{video_id}.srt")
         try:
-            srt_original = call_asr(
-                cfg.get("asr_api", ""), cfg.get("asr_key", ""), audio_path,
-                model=cfg.get("asr_model") or "mimo-v2.5-asr",
-            )
-            log("asr", "success", video_id=video_id)
+            asr_provider = cfg.get("asr_provider", "bijian")
+            vc_args = ["transcribe", audio_path,
+                       "--asr", asr_provider, "--format", "srt", "-o", srt_path]
+            if asr_provider == "whisper-api":
+                # Whisper API 后端:复用原 asr_api/asr_key/asr_model 字段
+                vc_args += [
+                    "--whisper-api-key", cfg.get("asr_key", ""),
+                    "--whisper-api-base", cfg.get("asr_api", ""),
+                    "--whisper-model", cfg.get("asr_model", ""),
+                ]
+            run_videocaptioner(vc_args)
+            with open(srt_path, "r", encoding="utf-8") as f:
+                srt_original = f.read()
+            log("asr", "success", video_id=video_id, asr_provider=asr_provider)
         except Exception as e:
             raise RuntimeError(f"ASR 转写失败: {e}")
 
-        # 4. 翻译 / 字幕生成
+        # 4. 翻译 / 字幕生成(videocaptioner)
         subtitle_mode = channel.get("subtitle_mode", "translated") if channel else "translated"
         translate_subtitle_enabled = cfg.get("translate_subtitle_enabled", True)
         subtitle_files = {}
+        zh_path = ""
         if subtitle_mode in ("translated", "both") and translate_subtitle_enabled:
             log("translate", "start", video_id=video_id)
             try:
-                srt_translated = call_translate(
-                    cfg.get("translate_api", ""), cfg.get("translate_key", ""),
-                    srt_original,
-                    model=cfg.get("translate_model") or "gpt-3.5-turbo",
-                )
+                subtitle_translator = cfg.get("subtitle_translator", "llm")
+                target_lang = cfg.get("subtitle_target_language", "zh-Hans")
                 zh_path = os.path.join(work_dir, f"{video_id}.zh.srt")
-                with open(zh_path, "w", encoding="utf-8") as f:
-                    f.write(srt_translated)
-                log("translate", "success", video_id=video_id)
+                vc_args = ["subtitle", srt_path, "--translator", subtitle_translator,
+                           "--target-language", target_lang, "-o", zh_path]
+                if subtitle_translator == "llm":
+                    if cfg.get("subtitle_optimize", True) is False:
+                        vc_args.append("--no-optimize")
+                    if cfg.get("subtitle_split", True) is False:
+                        vc_args.append("--no-split")
+                    if cfg.get("subtitle_reflect", False) is True:
+                        vc_args.append("--reflect")
+                    subtitle_prompt = cfg.get("subtitle_prompt", "")
+                    if subtitle_prompt:
+                        vc_args += ["--prompt", subtitle_prompt]
+                    vc_args += ["--api-key", cfg.get("translate_key", ""),
+                                "--api-base", cfg.get("translate_api", ""),
+                                "--model", cfg.get("translate_model", "")]
+                else:
+                    # bing/google 免费翻译:优化/断句需 LLM,强制跳过;只取译文不要双语
+                    vc_args += ["--no-optimize", "--no-split", "--layout", "target-only"]
+                run_videocaptioner(vc_args)
+                with open(zh_path, "r", encoding="utf-8") as f:
+                    srt_translated = f.read()
+                log("translate", "success", video_id=video_id,
+                    translator=subtitle_translator, target=target_lang)
             except Exception as e:
                 raise RuntimeError(f"翻译失败: {e}")
 

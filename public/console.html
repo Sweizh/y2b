@@ -284,6 +284,14 @@
       <div class="surface-card p-5 space-y-4">
         <h2 class="text-base font-medium">AI 服务接口</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2 flex flex-col">
+            <label for="fld-asr-provider" class="text-xs mb-1 block" style="color:var(--muted-foreground)">ASR 后端</label>
+            <select id="fld-asr-provider" data-field="asr_provider" class="input-base" style="font-size:11px;">
+              <option value="bijian" selected>必剪(免费)</option>
+              <option value="jianying">剪映(免费)</option>
+              <option value="whisper-api">Whisper API</option>
+            </select>
+          </div>
           <div class="flex flex-col">
             <label for="fld-asr-api-url" class="text-xs mb-1 block" style="color:var(--muted-foreground)">语音识别 API 地址</label>
             <div class="flex items-center gap-2">
@@ -297,6 +305,14 @@
               <input id="fld-asr-api-key" type="password" value="" placeholder="未设置" readonly class="input-base">
               <button class="btn-ghost btn-xs shrink-0">测试</button>
             </div>
+          </div>
+          <div class="md:col-span-2 flex flex-col">
+            <label for="fld-subtitle-translator" class="text-xs mb-1 block" style="color:var(--muted-foreground)">字幕翻译服务</label>
+            <select id="fld-subtitle-translator" data-field="subtitle_translator" class="input-base" style="font-size:11px;">
+              <option value="llm" selected>LLM</option>
+              <option value="bing">必应(免费)</option>
+              <option value="google">谷歌(免费)</option>
+            </select>
           </div>
           <div class="flex flex-col">
             <label for="fld-translate-api-url" class="text-xs mb-1 block" style="color:var(--muted-foreground)">翻译 API 地址</label>
@@ -340,6 +356,47 @@
             <div class="flex flex-col">
               <label for="fld-translate-prompt" class="text-xs mb-1 block" style="color:var(--muted-foreground)">翻译提示词注入</label>
               <textarea id="fld-translate-prompt" data-field="translate_prompt" rows="3" placeholder="用自然语言自定义翻译要求,如:标题保留英文专有名词,简介只保留前两句。留空使用默认 prompt。" class="input-base" style="font-size:12px;resize:vertical;min-height:60px"></textarea>
+            </div>
+          </div>
+          <div class="md:col-span-2 flex flex-col gap-3" style="padding-top:8px;border-top:1px solid var(--border)">
+            <h3 class="text-xs font-medium" style="color:var(--muted-foreground)">字幕选项</h3>
+            <div class="flex flex-col">
+              <label for="fld-subtitle-target-language" class="text-xs mb-1 block" style="color:var(--muted-foreground)">目标语言</label>
+              <input id="fld-subtitle-target-language" type="text" data-field="subtitle_target_language" value="zh-Hans" placeholder="zh-Hans" class="input-base" style="font-size:11px;">
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-xs block" style="color:var(--muted-foreground)">字幕优化</label>
+                <p class="text-xs mt-1" style="color:var(--muted-foreground);font-size:11px">开启后调用 LLM 进行 ASR 纠错</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="fld-subtitle-optimize" class="sr-only">
+                <div class="switch" data-field="subtitle_optimize" data-checked="true"></div>
+              </label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-xs block" style="color:var(--muted-foreground)">字幕断句</label>
+                <p class="text-xs mt-1" style="color:var(--muted-foreground);font-size:11px">开启后调用 LLM 进行语义断句</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="fld-subtitle-split" class="sr-only">
+                <div class="switch" data-field="subtitle_split" data-checked="true"></div>
+              </label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-xs block" style="color:var(--muted-foreground)">反思翻译</label>
+                <p class="text-xs mt-1" style="color:var(--muted-foreground);font-size:11px">开启后调用 LLM 进行反思式翻译(更慢)</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="fld-subtitle-reflect" class="sr-only">
+                <div class="switch" data-field="subtitle_reflect" data-checked="false"></div>
+              </label>
+            </div>
+            <div class="flex flex-col">
+              <label for="fld-subtitle-prompt" class="text-xs mb-1 block" style="color:var(--muted-foreground)">文稿提示</label>
+              <textarea id="fld-subtitle-prompt" data-field="subtitle_prompt" rows="3" placeholder="可选:术语表/参考文稿,辅助 LLM 翻译" class="input-base" style="font-size:12px;resize:vertical;min-height:60px"></textarea>
             </div>
           </div>
         </div>
