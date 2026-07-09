@@ -109,9 +109,13 @@ def run_cmd(cmd: list, cwd: str = None, timeout: int = None) -> subprocess.Compl
 
 
 def extract_audio(video_path: str, audio_path: str) -> None:
-    """用 ffmpeg 提取音频"""
+    """用 ffmpeg 提取音频(加 -hide_banner 让 stderr 只含实际错误)"""
+    if not os.path.exists(video_path):
+        work_dir = os.path.dirname(video_path)
+        files = os.listdir(work_dir) if os.path.isdir(work_dir) else []
+        raise RuntimeError(f"输入视频不存在: {video_path} (工作目录文件: {files})")
     run_cmd([
-        "ffmpeg", "-y", "-i", video_path,
+        "ffmpeg", "-y", "-hide_banner", "-i", video_path,
         "-vn", "-acodec", "libmp3lame", "-q:a", "4",
         audio_path,
     ], timeout=600)
