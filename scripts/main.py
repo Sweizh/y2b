@@ -281,16 +281,20 @@ def upload_to_bili(cfg: dict, video_path: str, cover_path: str, title: str,
     # 封面
     cover = cover_path if cover_path and Path(cover_path).exists() else ""
     # 元数据
+    # tag 至少 1 个,空列表会被 B 站返回 21001 参数错误
+    final_tags = tags[:10] if tags else ["搬运"]
     meta = {
         "title": title[:80],
         "desc": desc[:2000] if desc else "",
         "tid": tid or 122,  # 默认知识 - 科技科普
-        "tag": tags[:10] if tags else [],  # B 站要求 list,最多 10 个
+        "tag": final_tags,
         "copyright": copyright_,  # 1=自制 2=转载
     }
     # 转载视频必须提供 source 字段,否则 B 站会拒
     if copyright_ == 2:
         meta["source"] = f"https://www.youtube.com/watch?v={video_id}" if video_id else "YouTube"
+    log("bili_upload", "meta", tid=meta["tid"], tag_count=len(final_tags),
+        copyright=copyright_, has_source="source" in meta, has_cover=bool(cover))
     uploader = video_uploader.VideoUploader(
         pages=[page],
         meta=meta,
