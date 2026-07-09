@@ -178,6 +178,7 @@ app.get('/seasons', async (c) => {
 });
 
 // 代理拉取 B 站合集下的视频列表
+// Edge Function 已完成"取合集列表→找小节 ID→取小节视频"两步,返回 { episodes: [...] }
 app.get('/seasons/:season_id/episodes', async (c) => {
   const seasonId = c.req.param('season_id');
   if (!seasonId) {
@@ -188,11 +189,8 @@ app.get('/seasons/:season_id/episodes', async (c) => {
     return c.json({ error: '请先配置 B 站凭证' }, 400);
   }
   try {
-    const data = await fetchSeasonEpisodesViaVercel(cfg, seasonId);
-    if (data.code !== 0) {
-      return c.json({ error: data.message || '获取合集视频列表失败', raw: data }, 502);
-    }
-    return c.json(data.data);
+    const episodes = await fetchSeasonEpisodesViaVercel(cfg, seasonId);
+    return c.json({ episodes: episodes || [] });
   } catch (e: any) {
     return c.json({ error: '请求 B 站失败：' + (e.message || e) }, 502);
   }
