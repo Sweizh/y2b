@@ -99,10 +99,11 @@ export default async function handler(req: Request): Promise<Response> {
         });
       }
       // JSON 解析失败:记录诊断,尝试下一个 URL
+      const parseErr = parsed as { ok: false; error: string; preview: string };
       lastError = {
         stage: 'parse',
-        message: parsed.error,
-        preview: parsed.preview,
+        message: parseErr.error,
+        preview: parseErr.preview,
         status: resp.status,
         contentType: ct,
         url,
