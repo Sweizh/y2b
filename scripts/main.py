@@ -30,6 +30,7 @@ import requests
 WORKER_URL = os.environ.get("WORKER_URL", "").rstrip("/")
 PIPELINE_TOKEN = os.environ.get("PIPELINE_TOKEN", "")
 MAX_VIDEOS_PER_CHANNEL = 5  # 每个频道每次最多处理视频数
+MAX_VIDEOS_PER_RUN = 1  # 单次运行最多处理视频数(规避 GitHub Actions 封控 + 保障处理质量),其余等待下次触发
 
 # 模块级关闭标志:SIGTERM 处理器设置,main 的 finally 检查
 _shutdown_reason = ""
@@ -839,9 +840,16 @@ def main():
         # 3. 收集待处理视频
         results = []
         failed_results = []  # 单条回写失败的视频,末尾再批量重试一次
+        # 单次运行只处理 MAX_VIDEOS_PER_RUN 个视频(规避封控+质量),其余等待下次触发
+        processed_in_run = 0
+        run_done = False  # 达到单次限额后置 True,跳出所有循环
+        skipped_channel_pending = 0  # 因限额跳过的频道侧待处理数(观测用)
+        skipped_manual_pending = 0    # 因限额跳过的 manual_queue 侧待处理数(观测用)
 
         # 3.1 启用频道的最新视频
         for channel in channels:
+            if run_done:
+                break
             if not channel.get("enabled", True):
                 continue
             try:
@@ -896,6 +904,13 @@ def main():
                         failed_results.append(result)
                     if result["status"] == "success":
                         processed[video_id] = result
+                    # 单次运行限额:处理完一个即结束本轮(成功/失败都算)
+                    processed_in_run += 1
+                    if processed_in_run >= MAX_VIDEOS_PER_RUN:
+                        # 统计本频道剩余待处理 + 后续频道暂不展开(留待下次触发)
+                        skipped_channel_pending += 1  # 当前频道的剩余 entries
+                        run_done = True
+                        break
             except Exception as e:
                 log("channel_scan", "failed",
                     channel=channel.get("name", ""), error=str(e)[:200])
@@ -906,6 +921,8 @@ def main():
         COOLDOWN_SECONDS = 600  # 10 分钟冷却
         now_ts = time.time()
         for item in manual_queue:
+            if run_done:
+                break
             if not isinstance(item, dict):
                 continue
             video_id = item.get("video_id")
@@ -935,6 +952,19 @@ def main():
                 failed_results.append(result)
             if result["status"] == "success":
                 processed[video_id] = result
+            # 单次运行限额:处理完一个即结束本轮
+            processed_in_run += 1
+            if processed_in_run >= MAX_VIDEOS_PER_RUN:
+                skipped_manual_pending += 1  # 剩余 manual_queue 项
+                run_done = True
+                break
+
+        # 单次运行限额观测:输出因限额跳过的待处理数量,便于排查"为何还有视频没处理"
+        if run_done:
+            log("pipeline_limit", "skipped",
+                processed_in_run=processed_in_run,
+                skipped_channel_pending=skipped_channel_pending,
+                skipped_manual_pending=skipped_manual_pending)
 
         # 4. 单条回写失败项末尾再批量回写一次(尽量不丢)
         if failed_results:
