@@ -44,6 +44,10 @@ export interface Config {
   // 标题翻译模板(全局,支持变量 {channel} 频道名、{title} 翻译后标题)
   // 留空则不翻译不套模板,沿用 yt-dlp 原始标题
   title_template?: string;
+  // 翻译开关与提示词(全局)
+  translate_subtitle_enabled?: boolean;   // 字幕翻译总开关,默认 true
+  translate_title_enabled?: boolean;       // 标题与简介翻译开关,默认 false
+  translate_prompt?: string;               // 自然语言自定义翻译要求,留空用默认 prompt
 }
 
 export interface Channel {
@@ -57,6 +61,7 @@ export interface Channel {
   copyright?: 1 | 2;       // 1=自制 2=转载
   subtitle_mode?: 'translated' | 'original' | 'both' | 'none';
   enabled?: boolean;
+  since?: string;                          // 起始时间过滤(YYYY-MM-DD),仅搬运该日期之后发布的视频
   created_at?: number;
 }
 

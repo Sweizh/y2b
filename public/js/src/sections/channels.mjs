@@ -518,6 +518,16 @@ export function initChannels() {
       smOpts +
       '</select>' +
       '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:4px">' +
+      '<label for="ch-since-' +
+      cid +
+      '" style="font-size:12px;color:var(--apple-muted-foreground)">起始时间</label>' +
+      '<input type="date" id="ch-since-' +
+      cid +
+      '" data-field="since" value="' +
+      escapeHtml(ch.since || '') +
+      '" style="height:32px;padding:0 8px;border-radius:6px;font-size:12px;background:var(--apple-card);border:1px solid var(--apple-input);color:var(--apple-foreground)"/>' +
+      '</div>' +
       '<div style="display:flex;align-items:center;justify-content:space-between">' +
       '<label id="ch-toggle-label-' +
       cid +
@@ -564,6 +574,12 @@ export function initChannels() {
   function saveChannelCard(card) {
     var btn = card.querySelector('[data-save-channel]');
     var id = btn ? btn.getAttribute('data-save-channel') : '';
+    // 校验 since 字段格式 (允许空值,非空须为 YYYY-MM-DD)
+    var sinceEl = card.querySelector('[data-field="since"]');
+    var sinceVal = sinceEl ? sinceEl.value : '';
+    if (sinceVal && !/^\d{4}-\d{2}-\d{2}$/.test(sinceVal)) {
+      return Promise.resolve({ error: '起始时间格式应为 YYYY-MM-DD' });
+    }
     var payload = {};
     card.querySelectorAll('[data-field]').forEach(function (el) {
       var f = el.getAttribute('data-field');

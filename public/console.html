@@ -137,6 +137,21 @@
         <button data-dom-id="credentials-save-btn" class="btn-accent" style="padding:0 28px;">保存</button>
       </div>
     </section>
+
+    <section id="section-bili-seasons" class="space-y-6">
+      <div class="surface-card p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-medium">合集列表</h2>
+            <p class="text-xs mt-1" style="color:var(--muted-foreground)">点击合集查看已投稿视频</p>
+          </div>
+          <button data-dom-id="bili-seasons-refresh" class="btn-ghost btn-xs">刷新</button>
+        </div>
+        <div id="bili-seasons-list" class="space-y-2">
+          <p class="text-xs" style="color:var(--muted-foreground)">加载中...</p>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- ============================================================ -->
@@ -232,6 +247,38 @@
       <p class="text-sm mt-1" style="color:var(--muted-foreground)">AI 服务、失败通知</p>
     </header>
 
+    <section id="section-login-summary" class="space-y-4">
+      <div class="surface-card p-5">
+        <h2 class="text-base font-medium mb-4">登录与 API 配置</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <!-- YouTube 授权状态 -->
+          <div class="flex items-center justify-between p-3 rounded-lg" style="background:var(--muted)">
+            <div>
+              <p class="text-xs" style="color:var(--muted-foreground)">YouTube 授权</p>
+              <p id="summary-yt-status" class="text-sm font-medium mt-1" style="color:var(--muted-foreground)">检查中...</p>
+            </div>
+            <button data-summary-jump="youtube" class="btn-ghost btn-xs">配置</button>
+          </div>
+          <!-- B 站登录状态 -->
+          <div class="flex items-center justify-between p-3 rounded-lg" style="background:var(--muted)">
+            <div>
+              <p class="text-xs" style="color:var(--muted-foreground)">B 站登录</p>
+              <p id="summary-bili-status" class="text-sm font-medium mt-1" style="color:var(--muted-foreground)">检查中...</p>
+            </div>
+            <button data-summary-jump="bili" class="btn-ghost btn-xs">配置</button>
+          </div>
+          <!-- ASR/翻译 API -->
+          <div class="flex items-center justify-between p-3 rounded-lg" style="background:var(--muted)">
+            <div>
+              <p class="text-xs" style="color:var(--muted-foreground)">AI 服务</p>
+              <p id="summary-ai-status" class="text-sm font-medium mt-1" style="color:var(--muted-foreground)">检查中...</p>
+            </div>
+            <button data-summary-jump="ai" class="btn-ghost btn-xs">配置</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="section-ai-services" class="space-y-6">
       <!-- AI 服务接口 -->
       <div class="surface-card p-5 space-y-4">
@@ -268,6 +315,32 @@
           <div class="md:col-span-2 flex flex-col">
             <label for="fld-title-template" class="text-xs mb-1 block" style="color:var(--muted-foreground)">标题翻译模板</label>
             <input id="fld-title-template" type="text" data-field="title_template" value="" placeholder="支持变量: {channel}、{title}" readonly class="input-base" style="font-size:11px;">
+          </div>
+          <div class="md:col-span-2 flex flex-col gap-3" style="padding-top:8px;border-top:1px solid var(--border)">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-xs block" style="color:var(--muted-foreground)">内容翻译(字幕)</label>
+                <p class="text-xs mt-1" style="color:var(--muted-foreground);font-size:11px">开启后调用 LLM 翻译字幕生成 B 站 CC 字幕</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="fld-translate-subtitle-enabled" class="sr-only">
+                <div class="switch" data-field="translate_subtitle_enabled" data-checked="false"></div>
+              </label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-xs block" style="color:var(--muted-foreground)">标题与简介翻译</label>
+                <p class="text-xs mt-1" style="color:var(--muted-foreground);font-size:11px">开启后调用 LLM 翻译标题与简介</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="fld-translate-title-enabled" class="sr-only">
+                <div class="switch" data-field="translate_title_enabled" data-checked="false"></div>
+              </label>
+            </div>
+            <div class="flex flex-col">
+              <label for="fld-translate-prompt" class="text-xs mb-1 block" style="color:var(--muted-foreground)">翻译提示词注入</label>
+              <textarea id="fld-translate-prompt" data-field="translate_prompt" rows="3" placeholder="用自然语言自定义翻译要求,如:标题保留英文专有名词,简介只保留前两句。留空使用默认 prompt。" class="input-base" style="font-size:12px;resize:vertical;min-height:60px"></textarea>
+            </div>
           </div>
         </div>
         <div class="flex justify-end">

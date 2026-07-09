@@ -101,6 +101,36 @@ async function fetchSeasonsViaVercel(cfg: any): Promise<any> {
   return data.seasons;
 }
 
+// 通过 Vercel Edge 代理调 B 站 season episodes API,绕过 CF Worker IP 反爬
+async function fetchSeasonEpisodesViaVercel(cfg: any, seasonId: string): Promise<any> {
+  const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/seasons/${encodeURIComponent(seasonId)}/episodes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+    body: JSON.stringify({
+      sessdata: cfg.bili_sessdata,
+      bili_jct: cfg.bili_jct,
+      buvid3: cfg.bili_buvid3 || '',
+      season_id: seasonId,
+    }),
+  });
+  const text = await resp.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Vercel Edge 返回非 JSON (HTTP ${resp.status}): ${text.slice(0, 200)}`);
+  }
+  if (data.error) {
+    const parts = [data.error];
+    if (data.message) parts.push(`原因: ${data.message}`);
+    if (data.status) parts.push(`HTTP ${data.status}`);
+    if (data.contentType) parts.push(`content-type: ${data.contentType}`);
+    if (data.bodyPreview) parts.push(`预览: ${String(data.bodyPreview).slice(0, 120)}`);
+    throw new Error(parts.join(' | '));
+  }
+  return data.episodes;
+}
+
 // 通过 Vercel Edge 代理调 B 站 nav API,绕过 CF Worker IP 反爬
 async function fetchNavViaVercel(cfg: any): Promise<any> {
   const resp = await fetch(`${VERCEL_BILI_PROXY}/bili/nav`, {
@@ -139,6 +169,27 @@ app.get('/seasons', async (c) => {
     const data = await fetchSeasonsViaVercel(cfg);
     if (data.code !== 0) {
       return c.json({ error: data.message || '获取合集列表失败', raw: data }, 502);
+    }
+    return c.json(data.data);
+  } catch (e: any) {
+    return c.json({ error: '请求 B 站失败：' + (e.message || e) }, 502);
+  }
+});
+
+// 代理拉取 B 站合集下的视频列表
+app.get('/seasons/:season_id/episodes', async (c) => {
+  const seasonId = c.req.param('season_id');
+  if (!seasonId) {
+    return c.json({ error: '缺少 season_id' }, 400);
+  }
+  const cfg = await getRawConfig(c.env.YT2BILI_KV, c.env.ENCRYPTION_KEY || '');
+  if (!cfg.bili_sessdata || !cfg.bili_jct) {
+    return c.json({ error: '请先配置 B 站凭证' }, 400);
+  }
+  try {
+    const data = await fetchSeasonEpisodesViaVercel(cfg, seasonId);
+    if (data.code !== 0) {
+      return c.json({ error: data.message || '获取合集视频列表失败', raw: data }, 502);
     }
     return c.json(data.data);
   } catch (e: any) {

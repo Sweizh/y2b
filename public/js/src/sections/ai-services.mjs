@@ -98,6 +98,20 @@ function populateAiServices(cfg) {
   if (titleTplInput) {
     titleTplInput.value = cfg.title_template || '';
   }
+  // 翻译开关回填(switch 用 data-field 标识)
+  var subSwitch = aiSection.querySelector('[data-field="translate_subtitle_enabled"]');
+  if (subSwitch) {
+    subSwitch.setAttribute('data-checked', cfg.translate_subtitle_enabled !== false ? 'true' : 'false');
+  }
+  var titleSwitch = aiSection.querySelector('[data-field="translate_title_enabled"]');
+  if (titleSwitch) {
+    titleSwitch.setAttribute('data-checked', cfg.translate_title_enabled === true ? 'true' : 'false');
+  }
+  // 翻译提示词回填
+  var promptInput = aiSection.querySelector('[data-field="translate_prompt"]');
+  if (promptInput) {
+    promptInput.value = cfg.translate_prompt || '';
+  }
 }
 
 /**
@@ -136,6 +150,18 @@ function setupAiSave() {
       if (this.value && this.value.indexOf('****') >= 0) this.select();
     });
   });
+  // switch 点击切换(switch 非 input/textarea,不参与 dirty 检测,手动启用保存按钮)
+  aiSection.querySelectorAll('.switch[data-field]').forEach(function (sw) {
+    sw.addEventListener('click', function () {
+      var cur = sw.getAttribute('data-checked') === 'true';
+      sw.setAttribute('data-checked', cur ? 'false' : 'true');
+      if (save.disabled) {
+        save.disabled = false;
+        save.style.opacity = '1';
+        save.style.cursor = 'pointer';
+      }
+    });
+  });
   var fields = Array.from(aiSection.querySelectorAll('input,textarea'));
   var dirty = setupDirtyCheck(fields, save);
   save.addEventListener('click', function () {
@@ -156,6 +182,19 @@ function setupAiSave() {
     var titleTplInput = aiSection.querySelector('[data-field="title_template"]');
     if (titleTplInput) {
       body.title_template = titleTplInput.value;
+    }
+    // 翻译开关与提示词
+    var subSwitch = aiSection.querySelector('[data-field="translate_subtitle_enabled"]');
+    if (subSwitch) {
+      body.translate_subtitle_enabled = subSwitch.getAttribute('data-checked') === 'true';
+    }
+    var titleSwitch = aiSection.querySelector('[data-field="translate_title_enabled"]');
+    if (titleSwitch) {
+      body.translate_title_enabled = titleSwitch.getAttribute('data-checked') === 'true';
+    }
+    var promptInput = aiSection.querySelector('[data-field="translate_prompt"]');
+    if (promptInput) {
+      body.translate_prompt = promptInput.value;
     }
     apiPost('/api/config', body, { method: 'PUT' })
       .then(function (d) {

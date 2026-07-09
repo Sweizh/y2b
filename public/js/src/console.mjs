@@ -14,7 +14,9 @@ import { initTheme, bindThemeToggle } from './theme.mjs';
 import { initAuth } from './sections/auth.mjs';
 import { initCredentials } from './sections/credentials.mjs';
 import { initAiServices } from './sections/ai-services.mjs';
+import { initLoginSummary } from './sections/login-summary.mjs';
 import { initChannels } from './sections/channels.mjs';
+import { initBiliSeasons } from './sections/bili-seasons.mjs';
 import { initStatus } from './sections/status.mjs';
 import { initManual } from './sections/manual.mjs';
 import { ensureToastContainer } from './components/toast.mjs';
@@ -360,7 +362,9 @@ Array.prototype.forEach.call(
 // 8. 各 section 初始化
 // ═══════════════════════════════════════════════════════════════
 initCredentials();
+initLoginSummary();
 initAiServices();
 initChannels();
+initBiliSeasons();
 initStatus();
 initManual();

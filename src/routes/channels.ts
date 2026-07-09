@@ -6,7 +6,7 @@ import { getChannels, putChannels, generateId, type Channel } from '../kv';
 const app = new Hono<{ Bindings: Env }>();
 
 // 允许的字段白名单(防止注入任意字段)
-const CHANNEL_FIELDS = ['season_id', 'section_id', 'tid', 'tags', 'copyright', 'subtitle_mode', 'enabled'] as const;
+const CHANNEL_FIELDS = ['season_id', 'section_id', 'tid', 'tags', 'copyright', 'subtitle_mode', 'enabled', 'since'] as const;
 const SUBTITLE_MODES = ['translated', 'original', 'both', 'none'];
 
 // 从 body 中提取白名单字段并做类型转换

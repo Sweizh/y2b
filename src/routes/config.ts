@@ -26,15 +26,24 @@ app.put('/', async (c) => {
     'asr_api', 'asr_key', 'asr_model', 'translate_api', 'translate_key', 'translate_model',
     'notify_webhook',
     'title_template',  // 标题翻译模板(非敏感文本,不脱敏不加密)
+    'translate_subtitle_enabled',  // 字幕翻译开关(bool)
+    'translate_title_enabled',     // 标题与简介翻译开关(bool)
+    'translate_prompt',            // 翻译提示词(非敏感文本)
   ];
+  const BOOL_FIELDS = ['translate_subtitle_enabled', 'translate_title_enabled'];
   const merged: any = { ...existing };
   for (const f of ALLOWED_FIELDS) {
     if (body[f] === undefined) continue;
     const v = body[f];
     // 前端可能传脱敏字段(含 ****),表示用户未修改该字段,保留原值
     if (typeof v === 'string' && v.includes('****')) continue;
-    // 显式传 null/空串表示清空
-    merged[f] = v === null ? '' : String(v);
+    if (BOOL_FIELDS.indexOf(f) >= 0) {
+      // bool 字段:接受 true/false/"true"/"false"/1/0
+      merged[f] = (v === true || v === 'true' || v === 1 || v === '1');
+    } else {
+      // 显式传 null/空串表示清空
+      merged[f] = v === null ? '' : String(v);
+    }
   }
 
   await putConfig(c.env.YT2BILI_KV, merged, c.env.ENCRYPTION_KEY || '');

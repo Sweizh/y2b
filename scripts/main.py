@@ -201,7 +201,8 @@ def call_translate(translate_api: str, translate_key: str, srt_content: str,
 
 
 def call_translate_title(translate_api: str, translate_key: str, original_title: str,
-                          template_with_channel: str, model: str = "gpt-3.5-turbo") -> str:
+                          template_with_channel: str, model: str = "gpt-3.5-turbo",
+                          translate_prompt: str = "") -> str:
     """调用翻译 API 把原标题翻译为中文并套用模板
 
     Args:
@@ -213,12 +214,16 @@ def call_translate_title(translate_api: str, translate_key: str, original_title:
     if not translate_api or not translate_key:
         raise RuntimeError("翻译 API 未配置")
     endpoint = _chat_completions_url(translate_api)
-    prompt = (
+    base_prompt = (
         "请把以下英文视频标题翻译为简体中文,然后严格按以下格式输出,"
         "只输出最终标题,不要任何解释或引号。\n"
         f"格式:{template_with_channel}\n"
         f"原标题:{original_title}"
     )
+    if translate_prompt:
+        prompt = f"翻译要求:{translate_prompt}\n\n{base_prompt}"
+    else:
+        prompt = base_prompt
     resp = requests.post(
         endpoint,
         headers={
@@ -528,26 +533,32 @@ def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_over
             raise RuntimeError(f"下载失败: {e}")
         log("download", "success", video_id=video_id, title=title[:50])
 
-        # 1.5 标题翻译(若配置了 title_template)
+        # 1.5 标题翻译
         title_template = cfg.get("title_template", "")
-        if title_template:
+        translate_title_enabled = cfg.get("translate_title_enabled", False)
+        if translate_title_enabled:
             try:
                 log("translate_title", "start", video_id=video_id, original_title=title[:50])
-                # 预替换 {channel}(无频道则空串)
                 channel_name = channel.get("name", "") if channel else ""
-                template_with_channel = title_template.replace("{channel}", channel_name)
+                template_with_channel = title_template.replace("{channel}", channel_name) if title_template else "{title}"
                 translated = call_translate_title(
                     cfg.get("translate_api", ""),
                     cfg.get("translate_key", ""),
                     title,
                     template_with_channel,
                     model=cfg.get("translate_model") or "gpt-3.5-turbo",
+                    translate_prompt=cfg.get("translate_prompt", ""),
                 )
                 title = translated[:80]  # B 站标题限 80 字
                 result["title"] = title
                 log("translate_title", "success", video_id=video_id, final_title=title[:50])
             except Exception as e:
                 raise RuntimeError(f"标题翻译失败: {e}")
+        elif title_template:
+            # 未开启翻译但有模板:直接替换变量不调 LLM
+            channel_name = channel.get("name", "") if channel else ""
+            title = title_template.replace("{channel}", channel_name).replace("{title}", title)[:80]
+            result["title"] = title
 
         # 2. 提取音频
         log("extract_audio", "start", video_id=video_id)
@@ -570,8 +581,9 @@ def process_video(video_id: str, cfg: dict, channel: dict = None, season_id_over
 
         # 4. 翻译 / 字幕生成
         subtitle_mode = channel.get("subtitle_mode", "translated") if channel else "translated"
+        translate_subtitle_enabled = cfg.get("translate_subtitle_enabled", True)
         subtitle_files = {}
-        if subtitle_mode in ("translated", "both"):
+        if subtitle_mode in ("translated", "both") and translate_subtitle_enabled:
             log("translate", "start", video_id=video_id)
             try:
                 srt_translated = call_translate(
@@ -842,10 +854,39 @@ def main():
                     ) or {}
                 # 取最新 N 条
                 entries = (playlist.get("entries", []) or [])[:MAX_VIDEOS_PER_CHANNEL]
+                # 频道起始时间过滤:仅处理 since 之后发布的视频
+                since_str = channel.get("since", "")
+                since_dt = None
+                if since_str:
+                    try:
+                        # since 格式 YYYY-MM-DD,解析为 UTC 当天 00:00
+                        from datetime import datetime, timezone
+                        since_dt = datetime.strptime(since_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        log("channel_scan", "warn", channel=channel.get("name", ""),
+                            msg=f"since 格式非法: {since_str},忽略过滤")
                 for entry in entries:
                     video_id = entry.get("id", "") if isinstance(entry, dict) else ""
                     if not video_id or video_id in processed:
                         continue
+                    # since 过滤:published 早于 since 的跳过
+                    if since_dt and isinstance(entry, dict):
+                        published_str = entry.get("published") or entry.get("upload_date") or ""
+                        if published_str:
+                            try:
+                                from datetime import datetime, timezone
+                                from email.utils import parsedate_to_datetime
+                                pub_dt = None
+                                # 尝试 ISO 8601(yt-dlp 常见)
+                                try:
+                                    pub_dt = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
+                                except ValueError:
+                                    # 尝试 RFC 2822
+                                    pub_dt = parsedate_to_datetime(published_str)
+                                if pub_dt and pub_dt < since_dt:
+                                    continue
+                            except Exception:
+                                pass  # 解析失败不阻塞,继续处理
                     log("process", "start", video_id=video_id,
                         channel=channel.get("name", ""))
                     result = process_video(video_id, cfg, channel)
