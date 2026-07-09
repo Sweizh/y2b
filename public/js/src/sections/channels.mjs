@@ -224,8 +224,11 @@ export function initChannels() {
           // 构建 modal 内容
           var seasonOpts = '<option value="">不指定合集</option>';
           seasons.forEach(function (s) {
-            var sid = String(s.id || s.season_id || '');
-            var sname = s.name || s.title || s.season_title || ('合集 ' + sid);
+            // B 站创作中心 seasons 返回项为 {season:{id,title,...}, ...},
+            // 同时兼容扁平 {id,title}/{season_id,season_title}
+            var inner = s.season || s;
+            var sid = String(inner.id || s.id || s.season_id || '');
+            var sname = inner.title || s.name || s.title || s.season_title || ('合集 ' + sid);
             seasonOpts += '<option value="' + escapeHtml(sid) + '">' + escapeHtml(sname) + '</option>';
           });
           var smOpts = '<option value="translated">翻译字幕</option>' +
@@ -394,9 +397,12 @@ export function initChannels() {
       }
     } else {
       seasons.forEach(function (s) {
-        var sid = escapeHtml(String(s.id || s.season_id || ''));
-        var sname = escapeHtml(s.name || s.title || s.season_title || '合集 ' + sid);
-        var sel = String(ch.season_id) === String(s.id || s.season_id) ? ' selected' : '';
+        // B 站创作中心 seasons 返回项为 {season:{id,title,...}, ...},
+        // 同时兼容扁平 {id,title}/{season_id,season_title}
+        var inner = s.season || s;
+        var sid = escapeHtml(String(inner.id || s.id || s.season_id || ''));
+        var sname = escapeHtml(inner.title || s.name || s.title || s.season_title || '合集 ' + sid);
+        var sel = String(ch.season_id) === String(inner.id || s.id || s.season_id) ? ' selected' : '';
         seasonOpts += '<option value="' + sid + '"' + sel + '>' + sname + '</option>';
       });
     }

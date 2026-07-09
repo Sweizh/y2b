@@ -125,8 +125,11 @@ export function initManual() {
           }
         } else {
           seasons.forEach(function (s) {
-            const sid = escapeHtml(String(s.id || s.season_id || ''));
-            const sname = escapeHtml(s.name || s.title || s.season_title || ('合集 ' + sid));
+            // B 站创作中心 seasons 返回项为 {season:{id,title,...}, ...},
+            // 同时兼容扁平 {id,title}/{season_id,season_title}
+            const inner = s.season || s;
+            const sid = escapeHtml(String(inner.id || s.id || s.season_id || ''));
+            const sname = escapeHtml(inner.title || s.name || s.title || s.season_title || ('合集 ' + sid));
             seasonOpts += '<option value="' + sid + '">' + sname + '</option>';
           });
         }
